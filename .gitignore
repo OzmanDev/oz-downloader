@@ -1,0 +1,38 @@
+# Build artifacts
+build/
+*.app
+*.dmg
+DerivedData/
+*.o
+*.dSYM/
+
+# Xcode / macOS
+.DS_Store
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.swp
+*~.nib
+
+# Secrets / local credentials (never commit)
+.env
+.env.*
+credentials.json
+**/credentials.json
+*.p12
+*.cer
+*.mobileprovision
+
+# Python / local tooling
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editor
+.idea/
+.vscode/
+*.code-workspace

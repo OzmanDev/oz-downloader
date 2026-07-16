@@ -1,0 +1,286 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A8939F256C074B0CADA30960 /* ZotifyStudioApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8581696AB5AD48E58B4EDC25 /* ZotifyStudioApp.swift */; };
+		8067ED8A0DEF4A519FDE99E2 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5924597A4D044196B2CD34D8 /* ContentView.swift */; };
+		DCD6E2CC0E324BC29141226B /* AppPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 854CC6B567214651AC81CC8B /* AppPaths.swift */; };
+		9ACC2F6BF4364A3C888B0FC6 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8FD5F9839FA4315AC123E36 /* Models.swift */; };
+		F4443D1962BE4693AB7C987F /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13716CF0AA2747809054C661 /* AppStore.swift */; };
+		DA66D20ECCA042D0AC522B7B /* ZotifyCLI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07888CC4313843BD85D68385 /* ZotifyCLI.swift */; };
+		48EF2940EB4C44679FCBCD26 /* DownloadService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 333CEB835A8143A4AE1EBF6F /* DownloadService.swift */; };
+		59EBE042C603458481CB2707 /* DownloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04CD267C7BEB487ABCE321AC /* DownloadView.swift */; };
+		C8C8FEF52BD24F098CB39266 /* PlaylistsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E52FF0B176D4EB2BB3D5026 /* PlaylistsView.swift */; };
+		9B6D03A50BCD4C5298876114 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99684850B87A419EA4DA2E68 /* SettingsView.swift */; };
+		E7D878910F0D4DCEB4D6E6E0 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 232F3203D3ED4E0EA8299A39 /* AboutView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		DC12FF22C64C4A8CA833C704 /* ZotifyStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ZotifyStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8581696AB5AD48E58B4EDC25 /* ZotifyStudioApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZotifyStudioApp.swift; sourceTree = "<group>"; };
+		5924597A4D044196B2CD34D8 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		BC52358D575F40BF80ED5A28 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		854CC6B567214651AC81CC8B /* AppPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPaths.swift; sourceTree = "<group>"; };
+		B8FD5F9839FA4315AC123E36 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		13716CF0AA2747809054C661 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
+		07888CC4313843BD85D68385 /* ZotifyCLI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZotifyCLI.swift; sourceTree = "<group>"; };
+		333CEB835A8143A4AE1EBF6F /* DownloadService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadService.swift; sourceTree = "<group>"; };
+		04CD267C7BEB487ABCE321AC /* DownloadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadView.swift; sourceTree = "<group>"; };
+		3E52FF0B176D4EB2BB3D5026 /* PlaylistsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistsView.swift; sourceTree = "<group>"; };
+		99684850B87A419EA4DA2E68 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		232F3203D3ED4E0EA8299A39 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		213A57A2ACB847DFB29B9F77 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		D1210B7EC5084707AF01FBB5 = {
+			isa = PBXGroup;
+			children = (
+				E216D860E0564D3CAB6B3422 /* ZotifyStudio */,
+				B0E6A8FD622C4303965ABDB4 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B0E6A8FD622C4303965ABDB4 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				DC12FF22C64C4A8CA833C704 /* ZotifyStudio.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		E216D860E0564D3CAB6B3422 /* ZotifyStudio */ = {
+			isa = PBXGroup;
+			children = (
+				8581696AB5AD48E58B4EDC25 /* ZotifyStudioApp.swift */,
+				5924597A4D044196B2CD34D8 /* ContentView.swift */,
+				BC52358D575F40BF80ED5A28 /* Info.plist */,
+				7D1FB02CE5294B418C3F1CE8 /* Models */,
+				677E002B36CE4502947239FD /* Services */,
+				5BFF11090DDF4359BFF46D26 /* Views */,
+			);
+			path = ZotifyStudio;
+			sourceTree = "<group>";
+		};
+		7D1FB02CE5294B418C3F1CE8 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				854CC6B567214651AC81CC8B /* AppPaths.swift */,
+				B8FD5F9839FA4315AC123E36 /* Models.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		677E002B36CE4502947239FD /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				13716CF0AA2747809054C661 /* AppStore.swift */,
+				07888CC4313843BD85D68385 /* ZotifyCLI.swift */,
+				333CEB835A8143A4AE1EBF6F /* DownloadService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		5BFF11090DDF4359BFF46D26 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				04CD267C7BEB487ABCE321AC /* DownloadView.swift */,
+				3E52FF0B176D4EB2BB3D5026 /* PlaylistsView.swift */,
+				99684850B87A419EA4DA2E68 /* SettingsView.swift */,
+				232F3203D3ED4E0EA8299A39 /* AboutView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		66165559CF274B0EA70B9ED9 /* ZotifyStudio */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 61EBE855DAE04769917D8F02 /* Build configuration list for PBXNativeTarget "ZotifyStudio" */;
+			buildPhases = (
+				9BF255B8745C42CBB503588B /* Sources */,
+				213A57A2ACB847DFB29B9F77 /* Frameworks */,
+				5343E2D806D841988A626360 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ZotifyStudio;
+			productName = ZotifyStudio;
+			productReference = DC12FF22C64C4A8CA833C704 /* ZotifyStudio.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		345BCFABDA6A4BA8B438CCBE /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+			};
+			buildConfigurationList = 96686701AD004A37A6EB4A0D /* Build configuration list for PBXProject "ZotifyStudio" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = D1210B7EC5084707AF01FBB5;
+			productRefGroup = B0E6A8FD622C4303965ABDB4 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				66165559CF274B0EA70B9ED9 /* ZotifyStudio */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		5343E2D806D841988A626360 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		9BF255B8745C42CBB503588B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A8939F256C074B0CADA30960 /* ZotifyStudioApp.swift in Sources */,
+				8067ED8A0DEF4A519FDE99E2 /* ContentView.swift in Sources */,
+				DCD6E2CC0E324BC29141226B /* AppPaths.swift in Sources */,
+				9ACC2F6BF4364A3C888B0FC6 /* Models.swift in Sources */,
+				F4443D1962BE4693AB7C987F /* AppStore.swift in Sources */,
+				DA66D20ECCA042D0AC522B7B /* ZotifyCLI.swift in Sources */,
+				48EF2940EB4C44679FCBCD26 /* DownloadService.swift in Sources */,
+				59EBE042C603458481CB2707 /* DownloadView.swift in Sources */,
+				C8C8FEF52BD24F098CB39266 /* PlaylistsView.swift in Sources */,
+				9B6D03A50BCD4C5298876114 /* SettingsView.swift in Sources */,
+				E7D878910F0D4DCEB4D6E6E0 /* AboutView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		67DEED6AC1954BCABF8D29BB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				GCC_DYNAMIC_NO_PIC = NO;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		74A432B0A851457DADD93DB5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		38477D8851A54E94B7377709 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ZotifyStudio/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.zotify.studio;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		0365A23D180649D9B10F2207 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ZotifyStudio/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.zotify.studio;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		96686701AD004A37A6EB4A0D /* Build configuration list for PBXProject "ZotifyStudio" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				67DEED6AC1954BCABF8D29BB /* Debug */,
+				74A432B0A851457DADD93DB5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		61EBE855DAE04769917D8F02 /* Build configuration list for PBXNativeTarget "ZotifyStudio" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				38477D8851A54E94B7377709 /* Debug */,
+				0365A23D180649D9B10F2207 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 345BCFABDA6A4BA8B438CCBE /* Project object */;
+}
