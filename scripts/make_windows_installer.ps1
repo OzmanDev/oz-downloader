@@ -12,11 +12,7 @@ $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";
             [System.Environment]::GetEnvironmentVariable("Path", "User")
 
 function Find-Npm {
-    $cmd = Get-Command npm.cmd -ErrorAction SilentlyContinue
-    if ($cmd) { return $cmd.Source }
-    $cmd = Get-Command npm -ErrorAction SilentlyContinue
-    if ($cmd) { return $cmd.Source }
-
+    # Prefer npm.cmd — PowerShell's npm.ps1 shim is blocked under Restricted execution policy.
     $candidates = @(
         (Join-Path ${env:ProgramFiles} "nodejs\npm.cmd"),
         (Join-Path ${env:ProgramFiles(x86)} "nodejs\npm.cmd"),
@@ -26,18 +22,21 @@ function Find-Npm {
     foreach ($path in $candidates) {
         if ($path -and (Test-Path $path)) { return $path }
     }
+
+    $cmd = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    if ($cmd -and $cmd.Source -notlike "*.ps1") { return $cmd.Source }
     return $null
 }
 
 $Npm = Find-Npm
 if (-not $Npm) {
-    Write-Host "ERROR: npm was not found on PATH."
+    Write-Host "ERROR: npm.cmd was not found."
     Write-Host ""
-    Write-Host "Install Node.js LTS from https://nodejs.org (check 'Add to PATH'),"
-    Write-Host "then close this window and open a NEW PowerShell, or run:"
-    Write-Host '  $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")'
+    Write-Host "Install Node.js LTS from https://nodejs.org (check 'Add to PATH')."
+    Write-Host "If 'npm -v' fails with Execution Policy, either use npm.cmd or run:"
+    Write-Host "  Set-ExecutionPolicy -Scope CurrentUser RemoteSigned"
     Write-Host ""
-    Write-Host "Verify with:  node -v   and   npm -v"
+    Write-Host "Verify with:  node -v   and   npm.cmd -v"
     Write-Host "Then re-run:"
     Write-Host "  powershell -ExecutionPolicy Bypass -File .\scripts\make_windows_installer.ps1"
     exit 1
