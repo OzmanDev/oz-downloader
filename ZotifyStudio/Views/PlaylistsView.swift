@@ -128,11 +128,13 @@ struct PlaylistsView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(busy || downloads.isSigningIn)
+                .accessibilityIdentifier("playlists.refresh")
             }
 
             if hasDownloadSelection {
                 Button(downloads.isRunning ? "Add selected to queue" : "Download selected") { downloadSelected() }
                     .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("playlists.downloadSelected")
             }
 
             Spacer()
@@ -160,6 +162,7 @@ struct PlaylistsView: View {
                 Text(downloads.playlistStatusMessage)
                     .font(.caption)
                     .foregroundStyle(downloads.playlistStatusMessage.localizedCaseInsensitiveContains("rate") ? .orange : .red)
+                    .accessibilityIdentifier("playlists.status")
             }
 
             if store.isLoggedIn, !fetched.isEmpty {
@@ -283,6 +286,7 @@ struct PlaylistsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("playlists.row.\(pl.id)")
     }
 
     private func spotifySubtitle(for pl: FetchedPlaylist) -> String {

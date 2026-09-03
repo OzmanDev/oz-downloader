@@ -58,4 +58,35 @@ enum AppPaths {
             .replacingOccurrences(of: "'", with: "\\'")
         return "'\(escaped)'"
     }
+
+    /// Self-contained Python/zotify/ffmpeg shipped inside the .app (Contents/Resources/runtime).
+    static var bundledRuntimeDir: URL? {
+        guard let res = Bundle.main.resourceURL else { return nil }
+        let dir = res.appendingPathComponent("runtime", isDirectory: true)
+        let py = dir.appendingPathComponent("bin/python3")
+        guard FileManager.default.isExecutableFile(atPath: py.path) else { return nil }
+        return dir
+    }
+
+    static var bundledPythonURL: URL? {
+        bundledRuntimeDir?.appendingPathComponent("bin/python3")
+    }
+
+    static var bundledZotifyURL: URL? {
+        guard let dir = bundledRuntimeDir else { return nil }
+        let url = dir.appendingPathComponent("bin/zotify")
+        return FileManager.default.isExecutableFile(atPath: url.path) ? url : nil
+    }
+
+    static var bundledPostprocessURL: URL? {
+        guard let dir = bundledRuntimeDir else { return nil }
+        let url = dir.appendingPathComponent("bin/zotify-postprocess")
+        return FileManager.default.isExecutableFile(atPath: url.path) ? url : nil
+    }
+
+    static var bundledFFmpegURL: URL? {
+        guard let dir = bundledRuntimeDir else { return nil }
+        let url = dir.appendingPathComponent("bin/ffmpeg")
+        return FileManager.default.isExecutableFile(atPath: url.path) ? url : nil
+    }
 }

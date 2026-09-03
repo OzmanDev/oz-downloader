@@ -18,10 +18,17 @@
 		C8C8FEF52BD24F098CB39266 /* PlaylistsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E52FF0B176D4EB2BB3D5026 /* PlaylistsView.swift */; };
 		9B6D03A50BCD4C5298876114 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99684850B87A419EA4DA2E68 /* SettingsView.swift */; };
 		E7D878910F0D4DCEB4D6E6E0 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 232F3203D3ED4E0EA8299A39 /* AboutView.swift */; };
+
+		0D6C410D7AA24432BC393F37 /* UITestHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D529DF3F1AD48D09649F526 /* UITestHelpers.swift */; };
+		AF381BAF30834C2C93AA418C /* GetMusicUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33459083D4D74580AD60B721 /* GetMusicUITests.swift */; };
+		F4661E15209A44AB97296CBE /* ProgressCancelUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 850B887BA4E24BCDBE3348B0 /* ProgressCancelUITests.swift */; };
+		C550AF257DFE4647B7E719B2 /* PreferencesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B99876D8432475AB80CB628 /* PreferencesUITests.swift */; };
+		6A1564C9AB624DD38EE25CBA /* PlaylistsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8BB92164C78416D8004A9E7 /* PlaylistsUITests.swift */; };
+		33A3A0124FC141279CA08240 /* AuthUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FF73FD57F87493AB39F5E31 /* AuthUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		DC12FF22C64C4A8CA833C704 /* ZotifyStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ZotifyStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DC12FF22C64C4A8CA833C704 /* OzDownloader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OzDownloader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8581696AB5AD48E58B4EDC25 /* ZotifyStudioApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZotifyStudioApp.swift; sourceTree = "<group>"; };
 		5924597A4D044196B2CD34D8 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		BC52358D575F40BF80ED5A28 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -34,10 +41,26 @@
 		3E52FF0B176D4EB2BB3D5026 /* PlaylistsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistsView.swift; sourceTree = "<group>"; };
 		99684850B87A419EA4DA2E68 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		232F3203D3ED4E0EA8299A39 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+
+		2D529DF3F1AD48D09649F526 /* UITestHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestHelpers.swift; sourceTree = "<group>"; };
+		33459083D4D74580AD60B721 /* GetMusicUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GetMusicUITests.swift; sourceTree = "<group>"; };
+		850B887BA4E24BCDBE3348B0 /* ProgressCancelUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressCancelUITests.swift; sourceTree = "<group>"; };
+		1B99876D8432475AB80CB628 /* PreferencesUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesUITests.swift; sourceTree = "<group>"; };
+		F8BB92164C78416D8004A9E7 /* PlaylistsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistsUITests.swift; sourceTree = "<group>"; };
+		0FF73FD57F87493AB39F5E31 /* AuthUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthUITests.swift; sourceTree = "<group>"; };
+		E9C6A55F738F49859E055CD1 /* ZotifyStudioUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ZotifyStudioUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		213A57A2ACB847DFB29B9F77 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+
+		2518DB54A31C4D6E8924244E /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -51,6 +74,7 @@
 			isa = PBXGroup;
 			children = (
 				E216D860E0564D3CAB6B3422 /* ZotifyStudio */,
+				A2F2C3C2857942C191037F76 /* ZotifyStudioUITests */,
 				B0E6A8FD622C4303965ABDB4 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -58,7 +82,8 @@
 		B0E6A8FD622C4303965ABDB4 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				DC12FF22C64C4A8CA833C704 /* ZotifyStudio.app */,
+				DC12FF22C64C4A8CA833C704 /* OzDownloader.app */,
+				E9C6A55F738F49859E055CD1 /* ZotifyStudioUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -106,6 +131,20 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
+
+		A2F2C3C2857942C191037F76 /* ZotifyStudioUITests */ = {
+			isa = PBXGroup;
+			children = (
+				2D529DF3F1AD48D09649F526 /* UITestHelpers.swift */,
+				33459083D4D74580AD60B721 /* GetMusicUITests.swift */,
+				850B887BA4E24BCDBE3348B0 /* ProgressCancelUITests.swift */,
+				1B99876D8432475AB80CB628 /* PreferencesUITests.swift */,
+				F8BB92164C78416D8004A9E7 /* PlaylistsUITests.swift */,
+				0FF73FD57F87493AB39F5E31 /* AuthUITests.swift */,
+			);
+			path = ZotifyStudioUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -123,10 +162,50 @@
 			);
 			name = ZotifyStudio;
 			productName = ZotifyStudio;
-			productReference = DC12FF22C64C4A8CA833C704 /* ZotifyStudio.app */;
+			productReference = DC12FF22C64C4A8CA833C704 /* OzDownloader.app */;
 			productType = "com.apple.product-type.application";
 		};
+
+		382CA3A8776A4157B5C9D8B1 /* ZotifyStudioUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7562656E8C2041C48DC12A06 /* Build configuration list for PBXNativeTarget "ZotifyStudioUITests" */;
+			buildPhases = (
+				15A753AAE07B43D19A7E1AB5 /* Sources */,
+				2518DB54A31C4D6E8924244E /* Frameworks */,
+				24A42890027F422189781725 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				2F934E4AA2774C5091F2F205 /* PBXTargetDependency */,
+			);
+			name = ZotifyStudioUITests;
+			productName = ZotifyStudioUITests;
+			productReference = E9C6A55F738F49859E055CD1 /* ZotifyStudioUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXContainerItemProxy section */
+
+		226E9E37B8624FEB91234730 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 345BCFABDA6A4BA8B438CCBE /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 66165559CF274B0EA70B9ED9;
+			remoteInfo = ZotifyStudio;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+
+		2F934E4AA2774C5091F2F205 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 66165559CF274B0EA70B9ED9 /* ZotifyStudio */;
+			targetProxy = 226E9E37B8624FEB91234730 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 
 /* Begin PBXProject section */
 		345BCFABDA6A4BA8B438CCBE /* Project object */ = {
@@ -135,6 +214,15 @@
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1500;
 				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					382CA3A8776A4157B5C9D8B1 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = 66165559CF274B0EA70B9ED9;
+					};
+					66165559CF274B0EA70B9ED9 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
 			};
 			buildConfigurationList = 96686701AD004A37A6EB4A0D /* Build configuration list for PBXProject "ZotifyStudio" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -150,12 +238,21 @@
 			projectRoot = "";
 			targets = (
 				66165559CF274B0EA70B9ED9 /* ZotifyStudio */,
+				382CA3A8776A4157B5C9D8B1 /* ZotifyStudioUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		5343E2D806D841988A626360 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+
+		24A42890027F422189781725 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -180,6 +277,20 @@
 				C8C8FEF52BD24F098CB39266 /* PlaylistsView.swift in Sources */,
 				9B6D03A50BCD4C5298876114 /* SettingsView.swift in Sources */,
 				E7D878910F0D4DCEB4D6E6E0 /* AboutView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+
+		15A753AAE07B43D19A7E1AB5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0D6C410D7AA24432BC393F37 /* UITestHelpers.swift in Sources */,
+				AF381BAF30834C2C93AA418C /* GetMusicUITests.swift in Sources */,
+				F4661E15209A44AB97296CBE /* ProgressCancelUITests.swift in Sources */,
+				C550AF257DFE4647B7E719B2 /* PreferencesUITests.swift in Sources */,
+				6A1564C9AB624DD38EE25CBA /* PlaylistsUITests.swift in Sources */,
+				33A3A0124FC141279CA08240 /* AuthUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -230,8 +341,8 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.zotify.studio;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.oz.downloader;
+				PRODUCT_NAME = OzDownloader;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -252,10 +363,44 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.zotify.studio;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.oz.downloader;
+				PRODUCT_NAME = OzDownloader;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+
+		1B2C5CA9B53044A4902262C3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.oz.downloader.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = ZotifyStudio;
+			};
+			name = Debug;
+		};
+
+		7CF8D478B7E04CCBA6F3B47D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.oz.downloader.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = ZotifyStudio;
 			};
 			name = Release;
 		};
@@ -276,6 +421,16 @@
 			buildConfigurations = (
 				38477D8851A54E94B7377709 /* Debug */,
 				0365A23D180649D9B10F2207 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+
+		7562656E8C2041C48DC12A06 /* Build configuration list for PBXNativeTarget "ZotifyStudioUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1B2C5CA9B53044A4902262C3 /* Debug */,
+				7CF8D478B7E04CCBA6F3B47D /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

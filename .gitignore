@@ -36,3 +36,16 @@ venv/
 .idea/
 .vscode/
 *.code-workspace
+
+# Windows / Node
+windows/node_modules/
+windows/dist/
+windows/dist-electron/
+windows/dist-installer/
+windows/resources/runtime/
+windows/resources/cache/
+*.exe
+*.blockmap
+
+# Local scratch
+ui-counts.txt

@@ -19,13 +19,16 @@ struct SettingsView: View {
             Section("Where files go") {
                 HStack {
                     TextField("Default Download Folder", text: $store.settings.rootPath)
+                        .accessibilityIdentifier("prefs.rootPath")
                     Button("Choose…") { chooseRoot() }
+                        .accessibilityIdentifier("prefs.chooseFolder")
                 }
                 Button("Open default download folder") {
                     let url = URL(fileURLWithPath: store.settings.rootPath)
                     try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
                     NSWorkspace.shared.open(url)
                 }
+                .accessibilityIdentifier("prefs.openFolder")
             }
 
             Section("Music quality") {
@@ -34,13 +37,17 @@ struct SettingsView: View {
                         Text(q.label).tag(q.rawValue)
                     }
                 }
+                .accessibilityIdentifier("prefs.quality")
                 Picker("Save downloads as", selection: $store.settings.convertFormat) {
                     ForEach(AudioFormatChoice.allCases) { opt in
                         Text(opt.label).tag(opt.rawValue)
                     }
                 }
+                .accessibilityIdentifier("prefs.convertFormat")
                 Toggle("Convert automatically after each download", isOn: $store.settings.autoPostprocess)
+                    .accessibilityIdentifier("prefs.autoConvert")
                 TextField("Default genre (optional)", text: $store.settings.defaultGenre)
+                    .accessibilityIdentifier("prefs.genre")
             }
 
             Section("When re-downloading") {
@@ -100,15 +107,18 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(store.accountTitle)
                     .font(.headline)
+                    .accessibilityIdentifier("prefs.accountTitle")
                 Text(store.accountSubtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("prefs.accountSubtitle")
             }
 
             Spacer()
 
             if store.isLoggedIn {
                 Button("Sign out…") { confirmSignOut = true }
+                    .accessibilityIdentifier("prefs.signOut")
             } else if downloads.isSigningIn {
                 VStack(alignment: .trailing, spacing: 8) {
                     HStack(spacing: 8) {
@@ -117,15 +127,18 @@ struct SettingsView: View {
                         Text("Waiting for Spotify…")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("prefs.waitingSignIn")
                     }
                     HStack(spacing: 8) {
                         Button("Open page again") {
                             downloads.reopenSignInPage()
                         }
                         .disabled(downloads.pendingAuthURL == nil)
+                        .accessibilityIdentifier("prefs.reopenAuth")
                         Button("Cancel") {
                             downloads.cancelSignIn()
                         }
+                        .accessibilityIdentifier("prefs.cancelSignIn")
                     }
                 }
             } else {
@@ -133,6 +146,7 @@ struct SettingsView: View {
                     Task { await signIn() }
                 }
                 .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("prefs.signIn")
             }
         }
         .padding(.vertical, 4)

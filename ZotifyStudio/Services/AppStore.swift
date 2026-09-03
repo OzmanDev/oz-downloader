@@ -404,8 +404,11 @@ final class AppStore: ObservableObject {
         dict["ALWAYS_CHECK_LYRICS"] = "False"
         // Keep every playlist’s tracks in one folder: {playlist}/01_Artist_Song.ogg
         dict.removeValue(forKey: "OUTPUT_PLAYLIST") // deprecated; OUTPUT_PLAYLIST_EXT is used
-        dict["OUTPUT_PLAYLIST_EXT"] = "{playlist}/{playlist_num}_{artist}_{song_name}"
-
+        dict["OUTPUT_PLAYLIST_EXT"] = "{playlist}/{playlist_num}_{song_name}"
+        // Track/album single downloads (and track-by-track cancel mode) land flat in -rp folder.
+        dict["OUTPUT"] = "{song_name}"
+        dict["OUTPUT_SINGLE"] = "{song_name}"
+        dict["OUTPUT_ALBUM"] = "{album_num}_{song_name}"
         if let data = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: AppPaths.zotifyConfigURL, options: [.atomic])
         }

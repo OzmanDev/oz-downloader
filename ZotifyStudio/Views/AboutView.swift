@@ -8,6 +8,9 @@ struct AboutView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Oz Downloader")
                         .font(.largeTitle.bold())
+                    Text("v0.1.0")
+                        .font(.title3.weight(.medium))
+                        .foregroundStyle(.secondary)
                     Text("Download your Spotify playlists to this Mac — simply.")
                         .foregroundStyle(.secondary)
                 }

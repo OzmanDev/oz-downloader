@@ -16,47 +16,51 @@ struct LinkPreviewCard: View {
                 .frame(width: 40)
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(preview.error == nil ? preview.name : "Not found")
-                    .font(.headline)
-                    .lineLimit(2)
+            Text(preview.error == nil ? preview.name : "Not found")
+                .font(.headline)
+                .lineLimit(2)
+                .accessibilityIdentifier("preview.title")
 
-                if let err = preview.error {
-                    Text(err)
+            if let err = preview.error {
+                Text(err)
+                    .font(.subheadline)
+                    .foregroundStyle(.red.opacity(0.9))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("preview.error")
+            } else {
+                HStack(spacing: 8) {
+                    Text(kindLabel)
+                        .font(.caption)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(Color.secondary.opacity(0.15)))
+
+                    Text(preview.tracksLabel)
                         .font(.subheadline)
-                        .foregroundStyle(.red.opacity(0.9))
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    HStack(spacing: 8) {
-                        Text(kindLabel)
-                            .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(Color.secondary.opacity(0.15)))
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("preview.tracks")
 
-                        Text(preview.tracksLabel)
+                    if !preview.detail.isEmpty {
+                        Text("·")
+                            .foregroundStyle(.tertiary)
+                        Text(preview.detail)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-
-                        if !preview.detail.isEmpty {
-                            Text("·")
-                                .foregroundStyle(.tertiary)
-                            Text(preview.detail)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
+                            .lineLimit(1)
                     }
+                }
 
-                    if let onDownload {
-                        HStack(spacing: 10) {
-                            Button(action: onDownload) {
-                                Label(
-                                    isDownloading ? "Add to queue" : downloadTitle,
-                                    systemImage: isDownloading ? "plus.circle.fill" : "arrow.down.circle.fill"
-                                )
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(!canDownload)
+                if let onDownload {
+                    HStack(spacing: 10) {
+                        Button(action: onDownload) {
+                            Label(
+                                isDownloading ? "Add to queue" : downloadTitle,
+                                systemImage: isDownloading ? "plus.circle.fill" : "arrow.down.circle.fill"
+                            )
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!canDownload)
+                        .accessibilityIdentifier("preview.download")
 
                             Text(preview.matchLabel)
                                 .font(.caption)

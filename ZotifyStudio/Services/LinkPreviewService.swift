@@ -221,9 +221,9 @@ final class LinkPreviewService: ObservableObject {
         }
         do {
             let meta = try await fetchMetadata(url: url)
-            let localIds = loadLocalTrackIds(root: musicRoot)
             let ids = meta.trackIds
-            let have = ids.filter { localIds.contains($0) }.count
+            let names = meta.trackNames
+            let have = Self.countAlreadyHave(trackIds: ids, trackNames: names, root: musicRoot)
             let status: LinkPreview.MatchStatus
             if ids.isEmpty {
                 status = .unknown
@@ -250,34 +250,70 @@ final class LinkPreviewService: ObservableObject {
                 nil
             )
         } catch {
+            // Not signed in / API fail — still resolve public playlists via embed page.
+            if let embed = await fetchPublicEmbedMeta(url: url) {
+                let ids = embed.trackIds
+                let names = embed.trackNames
+                let have = Self.countAlreadyHave(trackIds: ids, trackNames: names, root: musicRoot)
+                let status: LinkPreview.MatchStatus
+                if ids.isEmpty {
+                    status = .unknown
+                } else if have == 0 {
+                    status = .noneDownloaded
+                } else if have >= ids.count {
+                    status = .fullyDownloaded
+                } else {
+                    status = .partiallyDownloaded
+                }
+                return (
+                    LinkPreview(
+                        url: url,
+                        kind: embed.kind,
+                        name: embed.name,
+                        detail: embed.detail,
+                        trackCount: max(embed.trackCount, ids.count),
+                        trackIds: ids,
+                        trackNames: embed.trackNames,
+                        alreadyHave: have,
+                        status: status,
+                        error: nil
+                    ),
+                    nil
+                )
+            }
             return (nil, friendlyError(error.localizedDescription))
         }
     }
 
     private func refresh(urls: [String], musicRoot: String, requestID: UUID) async {
-        // Phase 1: fast title via oEmbed (parallel, no auth)
+        // Phase 1: fast title via oEmbed + public embed track list (no Spotify sign-in).
         var quickResults: [LinkPreview] = []
         let targetURLs = Array(urls.prefix(5))
-        await withTaskGroup(of: (String, OEmbedResult?).self) { group in
+        await withTaskGroup(of: (String, OEmbedResult?, RemoteMeta?).self) { group in
             for url in targetURLs {
                 group.addTask {
-                    let result = try? await Self.fetchOEmbed(url: url)
-                    return (url, result)
+                    let oembed = try? await Self.fetchOEmbed(url: url)
+                    let embed = await Self.fetchPublicEmbedMeta(url: url)
+                    return (url, oembed, embed)
                 }
             }
-            for await (url, oembed) in group {
+            for await (url, oembed, embed) in group {
                 if Task.isCancelled || self.requestID != requestID { return }
-                guard let oembed else { continue }
-                let kind = Self.kindFromURL(url)
+                let kind = embed?.kind ?? Self.kindFromURL(url)
+                let name = embed?.name.isEmpty == false ? (embed?.name ?? "") : (oembed?.title ?? "")
+                guard !name.isEmpty || embed != nil else { continue }
+                let count = embed?.trackCount ?? 0
+                let ids = embed?.trackIds ?? []
+                let names = embed?.trackNames ?? []
                 quickResults.append(
                     LinkPreview(
                         url: url,
                         kind: kind,
-                        name: oembed.title,
-                        detail: "",
-                        trackCount: 0,
-                        trackIds: [],
-                        trackNames: [],
+                        name: name.isEmpty ? "Playlist" : name,
+                        detail: embed?.detail ?? "",
+                        trackCount: count > 0 ? count : ids.count,
+                        trackIds: ids,
+                        trackNames: names,
                         alreadyHave: 0,
                         status: .unknown,
                         error: nil
@@ -288,7 +324,31 @@ final class LinkPreviewService: ObservableObject {
 
         guard self.requestID == requestID else { return }
         if !quickResults.isEmpty {
-            previews = quickResults
+            // Apply local disk match if we already have track IDs from public embed.
+            previews = quickResults.map { preview in
+                guard !preview.trackIds.isEmpty else { return preview }
+                let have = Self.countAlreadyHave(
+                    trackIds: preview.trackIds,
+                    trackNames: preview.trackNames,
+                    root: musicRoot
+                )
+                let status: LinkPreview.MatchStatus
+                if have == 0 { status = .noneDownloaded }
+                else if have >= preview.trackIds.count { status = .fullyDownloaded }
+                else { status = .partiallyDownloaded }
+                return LinkPreview(
+                    url: preview.url,
+                    kind: preview.kind,
+                    name: preview.name,
+                    detail: preview.detail,
+                    trackCount: preview.trackCount,
+                    trackIds: preview.trackIds,
+                    trackNames: preview.trackNames,
+                    alreadyHave: have,
+                    status: status,
+                    error: nil
+                )
+            }
             isLoading = false
             inputError = nil
             message = ""
@@ -296,18 +356,20 @@ final class LinkPreviewService: ObservableObject {
 
         isEnriching = true
 
-        // Phase 2: enrich with track details in background
-        let localIds = Self.loadLocalTrackIds(root: musicRoot)
+        // Phase 2: enrich with signed-in zotify / Web API (full names + private playlists).
         var enriched: [LinkPreview] = []
         for url in urls.prefix(5) {
             if Task.isCancelled || self.requestID != requestID { return }
+            let quick = quickResults.first(where: { $0.url == url })
             do {
                 let meta = try await Self.fetchMetadata(url: url)
-                let ids = meta.trackIds
-                let have = ids.filter { localIds.contains($0) }.count
+                let ids = meta.trackIds.isEmpty ? (quick?.trackIds ?? []) : meta.trackIds
+                let names = meta.trackNames.isEmpty ? (quick?.trackNames ?? []) : meta.trackNames
+                let count = max(meta.trackCount, ids.count, quick?.trackCount ?? 0)
+                let have = Self.countAlreadyHave(trackIds: ids, trackNames: names, root: musicRoot)
                 let status: LinkPreview.MatchStatus
                 if ids.isEmpty {
-                    status = .unknown
+                    status = count > 0 ? .unknown : .unknown
                 } else if have == 0 {
                     status = .noneDownloaded
                 } else if have >= ids.count {
@@ -321,16 +383,18 @@ final class LinkPreviewService: ObservableObject {
                         kind: meta.kind,
                         name: meta.name,
                         detail: meta.detail,
-                        trackCount: meta.trackCount > 0 ? meta.trackCount : ids.count,
+                        trackCount: count,
                         trackIds: ids,
-                        trackNames: meta.trackNames,
+                        trackNames: names,
                         alreadyHave: have,
                         status: status,
                         error: nil
                     )
                 )
             } catch {
-                if quickResults.contains(where: { $0.url == url }) {
+                // Keep public-embed preview (with real song count) instead of falling back to 0.
+                if let quick {
+                    enriched.append(quick)
                     continue
                 }
                 let friendly = Self.friendlyError(error.localizedDescription)
@@ -393,17 +457,117 @@ final class LinkPreviewService: ObservableObject {
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let title = obj["title"] as? String, !title.isEmpty
         else {
-            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
             throw NSError(domain: "oEmbed", code: 2,
                 userInfo: [NSLocalizedDescriptionKey: "oEmbed failed"])
         }
-        let result = OEmbedResult(
-            title: title,
-            thumbnailURL: obj["thumbnail_url"] as? String ?? ""
-        )
+        let thumb = (obj["thumbnail_url"] as? String) ?? ""
+        let result = OEmbedResult(title: title, thumbnailURL: thumb)
         oembedCache[url] = result
         return result
     }
+
+    /// Public Spotify embed page — works without sign-in. Used so Get Music shows
+    /// real song counts (oEmbed alone never includes track totals).
+    private static func fetchPublicEmbedMeta(url: String) async -> RemoteMeta? {
+        guard let parsed = parseSpotifyURL(url) else { return nil }
+        let embedURLString = "https://open.spotify.com/embed/\(parsed.kind)/\(parsed.id)"
+        guard let embedURL = URL(string: embedURLString) else { return nil }
+        var request = URLRequest(url: embedURL)
+        request.setValue(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15",
+            forHTTPHeaderField: "User-Agent"
+        )
+        request.timeoutInterval = 15
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+                  let html = String(data: data, encoding: .utf8) else { return nil }
+
+            var name = ""
+            // Prefer JSON "name":"..." capture (avoid leaving a trailing quote in the folder name).
+            if let re = try? NSRegularExpression(pattern: #""name"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)""#),
+               let match = re.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
+               match.numberOfRanges > 1,
+               let r = Range(match.range(at: 1), in: html) {
+                name = String(html[r])
+                    .replacingOccurrences(of: #"\""#, with: "\"")
+                    .replacingOccurrences(of: #"\\/"#, with: "/")
+            }
+            if name.isEmpty,
+               let re = try? NSRegularExpression(pattern: #""title"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)""#),
+               let match = re.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
+               match.numberOfRanges > 1,
+               let r = Range(match.range(at: 1), in: html) {
+                name = String(html[r])
+            }
+            name = DownloadService.sanitizePlaylistFolderName(name)
+
+            var ids: [String] = []
+            var seen = Set<String>()
+            let idPattern = try NSRegularExpression(pattern: #"spotify:track:([A-Za-z0-9]+)"#)
+            let ns = html as NSString
+            idPattern.enumerateMatches(in: html, range: NSRange(location: 0, length: ns.length)) { match, _, _ in
+                guard let match, match.numberOfRanges > 1 else { return }
+                let tid = ns.substring(with: match.range(at: 1))
+                if seen.insert(tid).inserted {
+                    ids.append(tid)
+                }
+            }
+
+            // Prefer visible row count when present (embed caps list length sometimes).
+            var rowMax = -1
+            let rowPattern = try NSRegularExpression(pattern: #"tracklist-row-(\d+)"#)
+            rowPattern.enumerateMatches(in: html, range: NSRange(location: 0, length: ns.length)) { match, _, _ in
+                guard let match, match.numberOfRanges > 1,
+                      let n = Int(ns.substring(with: match.range(at: 1))) else { return }
+                rowMax = max(rowMax, n)
+            }
+            let rowCount = rowMax >= 0 ? rowMax + 1 : 0
+            let count = max(ids.count, rowCount)
+
+            // Titles from tracklist rows (best-effort; may be shorter than full playlist).
+            var names: [String] = []
+            let titlePattern = try NSRegularExpression(
+                pattern: #"TracklistRow_title__[^"]*"[^>]*>([^<]+)<"#
+            )
+            titlePattern.enumerateMatches(in: html, range: NSRange(location: 0, length: ns.length)) { match, _, _ in
+                guard let match, match.numberOfRanges > 1 else { return }
+                let t = ns.substring(with: match.range(at: 1))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !t.isEmpty { names.append(t) }
+            }
+            while names.count < ids.count {
+                names.append("Song \(names.count + 1)")
+            }
+            if names.count > ids.count {
+                names = Array(names.prefix(ids.count))
+            }
+
+            guard count > 0 || !name.isEmpty else { return nil }
+            return RemoteMeta(
+                kind: parsed.kind,
+                name: name.isEmpty ? parsed.kind.capitalized : name,
+                detail: "",
+                trackCount: count,
+                trackIds: ids,
+                trackNames: names
+            )
+        } catch {
+            return nil
+        }
+    }
+
+    private static func parseSpotifyURL(_ raw: String) -> (kind: String, id: String)? {
+        let pattern = #"(playlist|album|track)[/:]([A-Za-z0-9]+)"#
+        guard let re = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+              let match = re.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)),
+              match.numberOfRanges > 2,
+              let kindRange = Range(match.range(at: 1), in: raw),
+              let idRange = Range(match.range(at: 2), in: raw)
+        else { return nil }
+        return (String(raw[kindRange]).lowercased(), String(raw[idRange]))
+    }
+
 
     private static func friendlyError(_ raw: String) -> String {
         let lower = raw.lowercased()
@@ -444,26 +608,101 @@ final class LinkPreviewService: ObservableObject {
     }
 
     static func loadLocalTrackIds(root: String) -> Set<String> {
+        loadLocalArchiveIndex(root: root).ids
+    }
+
+    private struct LocalArchiveIndex {
+        var ids: Set<String>
+        var titleKeys: Set<String>
+    }
+
+    private static func normalizedTitleKey(_ name: String) -> String {
+        let base = name.replacingOccurrences(of: "—", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+        return base.lowercased().filter { $0.isLetter || $0.isNumber || $0.isWhitespace }
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+    }
+
+    private static func titleKeysFromDisplayName(_ name: String) -> [String] {
+        var keys: [String] = []
+        let full = normalizedTitleKey(name)
+        if !full.isEmpty { keys.append(full) }
+        for sep in ["—", " – ", " - "] {
+            if let r = name.range(of: sep) {
+                let title = String(name[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let t = normalizedTitleKey(title)
+                if !t.isEmpty, !keys.contains(t) { keys.append(t) }
+                break
+            }
+        }
+        return keys
+    }
+
+    private static func titleKeysFromAudioFilename(_ filename: String) -> [String] {
+        var keys: [String] = []
+        var base = (filename as NSString).deletingPathExtension
+        if let range = base.range(of: #"^\d+_"#, options: .regularExpression) {
+            base.removeSubrange(range)
+        }
+        let spaced = base.replacingOccurrences(of: "_", with: " ")
+        let full = normalizedTitleKey(spaced)
+        if !full.isEmpty { keys.append(full) }
+        if let us = base.firstIndex(of: "_") {
+            let after = String(base[base.index(after: us)...]).replacingOccurrences(of: "_", with: " ")
+            let titleOnly = normalizedTitleKey(after)
+            if !titleOnly.isEmpty, !keys.contains(titleOnly) { keys.append(titleOnly) }
+        }
+        return keys
+    }
+
+    private static func loadLocalArchiveIndex(root: String) -> LocalArchiveIndex {
         var ids = Set<String>()
+        var titleKeys = Set<String>()
         let rootURL = URL(fileURLWithPath: root)
-        // Do not skip hidden files — archives live in ".song_ids"
+        let audioExts: Set<String> = ["flac", "ogg", "mp3", "m4a", "wav"]
         guard let enumerator = FileManager.default.enumerator(
             at: rootURL,
             includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsPackageDescendants]
-        ) else { return ids }
+        ) else { return LocalArchiveIndex(ids: ids, titleKeys: titleKeys) }
 
         for case let fileURL as URL in enumerator {
-            guard fileURL.lastPathComponent == ".song_ids" else { continue }
-            guard let data = try? String(contentsOf: fileURL, encoding: .utf8) else { continue }
-            for line in data.split(whereSeparator: \.isNewline) {
-                let parts = line.split(separator: "\t", maxSplits: 1)
-                if let first = parts.first, !first.isEmpty {
-                    ids.insert(String(first))
+            if fileURL.lastPathComponent == ".song_ids" {
+                guard let data = try? String(contentsOf: fileURL, encoding: .utf8) else { continue }
+                for line in data.split(whereSeparator: \.isNewline) {
+                    let parts = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+                    guard parts.count >= 5 else { continue }
+                    if !parts[0].isEmpty { ids.insert(parts[0]) }
+                    let titleKey = normalizedTitleKey(parts[3])
+                    if !titleKey.isEmpty { titleKeys.insert(titleKey) }
+                }
+                continue
+            }
+            guard audioExts.contains(fileURL.pathExtension.lowercased()) else { continue }
+            for key in titleKeysFromAudioFilename(fileURL.lastPathComponent) {
+                titleKeys.insert(key)
+            }
+        }
+        return LocalArchiveIndex(ids: ids, titleKeys: titleKeys)
+    }
+
+    private static func countAlreadyHave(trackIds: [String], trackNames: [String], root: String) -> Int {
+        let index = loadLocalArchiveIndex(root: root)
+        var have = 0
+        for (i, id) in trackIds.enumerated() {
+            if index.ids.contains(id) {
+                have += 1
+                continue
+            }
+            if i < trackNames.count {
+                let keys = titleKeysFromDisplayName(trackNames[i])
+                if keys.contains(where: index.titleKeys.contains) {
+                    have += 1
                 }
             }
         }
-        return ids
+        return have
     }
 
     private struct RemoteMeta {
@@ -559,29 +798,49 @@ final class LinkPreviewService: ObservableObject {
 
         def fetch_with_token(token):
             if kind == "playlist":
-                d = api_get(token, f"playlists/{sid}?fields=name,owner(display_name),tracks(total,items(track(id,name,artists(name))))")
-                if d is None:
+                meta = api_get(token, f"playlists/{sid}?fields=name,owner(display_name),tracks(total)")
+                if meta is None:
                     return None
-                if not d:
+                if not meta:
                     return {"ok": False, "error": "Playlist not found"}
-                name = (d.get("name") or "Playlist").strip()
+                name = (meta.get("name") or "Playlist").strip()
                 owner = ""
-                o = d.get("owner")
+                o = meta.get("owner")
                 if isinstance(o, dict):
                     owner = o.get("display_name") or ""
-                tracks_obj = d.get("tracks") or {}
-                count = tracks_obj.get("total") or 0
-                items = tracks_obj.get("items") or []
+                count = ((meta.get("tracks") or {}).get("total")) or 0
                 ids, names = [], []
-                for it in items:
-                    t = it.get("track")
-                    if not isinstance(t, dict) or not t.get("id"):
-                        continue
-                    ids.append(t["id"])
-                    n = (t.get("name") or "").strip()
-                    if not n:
-                        n = f"Track {len(ids)}"
-                    names.append(n)
+                offset = 0
+                page_size = 100
+                while True:
+                    page = api_get(
+                        token,
+                        f"playlists/{sid}/tracks?limit={page_size}&offset={offset}"
+                        f"&fields=total,items(track(id,name,artists(name)))"
+                    )
+                    if page is None:
+                        # Keep whatever we already fetched rather than failing entirely.
+                        break
+                    if not count:
+                        count = page.get("total") or 0
+                    items = page.get("items") or []
+                    if not items:
+                        break
+                    for it in items:
+                        t = it.get("track")
+                        if not isinstance(t, dict) or not t.get("id"):
+                            continue
+                        ids.append(t["id"])
+                        n = (t.get("name") or "").strip() or f"Track {len(ids)}"
+                        arts = t.get("artists") or []
+                        artist = ", ".join(
+                            a.get("name", "") for a in arts if isinstance(a, dict) and a.get("name")
+                        )
+                        names.append(f"{artist} — {n}" if artist else n)
+                    offset += len(items)
+                    total = page.get("total") or count or 0
+                    if offset >= total or len(items) < page_size:
+                        break
                 if not count:
                     count = len(ids)
                 return {"ok": True, "kind": "playlist", "name": name, "detail": owner,
@@ -597,13 +856,34 @@ final class LinkPreviewService: ObservableObject {
                 artists = d.get("artists") or []
                 detail = ", ".join(a.get("name","") for a in artists if isinstance(a, dict))
                 count = d.get("total_tracks") or 0
-                items = (d.get("tracks") or {}).get("items") or []
                 ids, names = [], []
-                for t in items:
-                    if not isinstance(t, dict) or not t.get("id"):
-                        continue
-                    ids.append(t["id"])
-                    names.append((t.get("name") or f"Track {len(ids)}").strip())
+                offset = 0
+                page_size = 50
+                while True:
+                    if offset == 0:
+                        items = (d.get("tracks") or {}).get("items") or []
+                        total = (d.get("tracks") or {}).get("total") or count
+                    else:
+                        page = api_get(token, f"albums/{sid}/tracks?limit={page_size}&offset={offset}")
+                        if page is None:
+                            break
+                        items = page.get("items") or []
+                        total = page.get("total") or count
+                    if not items:
+                        break
+                    for t in items:
+                        if not isinstance(t, dict) or not t.get("id"):
+                            continue
+                        ids.append(t["id"])
+                        n = (t.get("name") or f"Track {len(ids)}").strip()
+                        arts = t.get("artists") or artists
+                        artist = ", ".join(
+                            a.get("name", "") for a in arts if isinstance(a, dict) and a.get("name")
+                        )
+                        names.append(f"{artist} — {n}" if artist else n)
+                    offset += len(items)
+                    if offset >= (total or 0) or len(items) < page_size:
+                        break
                 if not count:
                     count = len(ids)
                 return {"ok": True, "kind": "album", "name": name, "detail": detail,

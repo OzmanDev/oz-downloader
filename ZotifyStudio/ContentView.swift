@@ -56,11 +56,10 @@ struct ContentView: View {
             if downloads.toastVisible, !downloads.toastMessage.isEmpty {
                 toastBanner
                     .padding(.top, 52)
-                    .transition(.move(edge: .top).combined(with: .opacity))
                     .zIndex(10)
             }
         }
-        .animation(.easeInOut(duration: 0.22), value: downloads.toastVisible)
+        // Avoid animating toast in/out — it was blanking Get Music content on cancel/finish.
         .frame(minWidth: 980, minHeight: 680)
         .onChange(of: selectedTab) { tab in
             if tab == .getMusic {
@@ -124,6 +123,16 @@ struct ContentView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(tabAccessibilityId(tab))
+    }
+
+    private func tabAccessibilityId(_ tab: AppTab) -> String {
+        switch tab {
+        case .getMusic: return "tab.getMusic"
+        case .playlists: return "tab.playlists"
+        case .preferences: return "tab.preferences"
+        case .help: return "tab.help"
+        }
     }
 
     private var toastBanner: some View {

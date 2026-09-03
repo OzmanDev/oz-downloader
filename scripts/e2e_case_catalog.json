@@ -1,0 +1,863 @@
+{
+  "suites": {
+    "smoke": {
+      "script": "e2e_test.sh",
+      "title": "Release / tools / convert smoke"
+    },
+    "downloads": {
+      "script": "e2e_downloads_test.sh",
+      "title": "Downloads / cancel / auth / formats / lifecycle"
+    },
+    "ui": {
+      "script": "e2e_ui_test.sh",
+      "title": "UI / OAuth / Gatekeeper / network"
+    }
+  },
+  "cases": [
+    {
+      "id": "R1",
+      "suite": "smoke",
+      "match": [
+        "R1 notarization"
+      ],
+      "title": "DMG notarization (spctl)",
+      "steps": [
+        "Locate Desktop OzDownloader-Installer.dmg",
+        "Run spctl -a -vv -t install on the DMG",
+        "Confirm accepted + Notarized Developer ID"
+      ],
+      "expected": "Gatekeeper accepts the DMG as notarized Developer ID"
+    },
+    {
+      "id": "R2",
+      "suite": "smoke",
+      "match": [
+        "R2 staple"
+      ],
+      "title": "DMG staple ticket",
+      "steps": [
+        "Run xcrun stapler validate on the DMG",
+        "Confirm validate action worked"
+      ],
+      "expected": "Staple ticket present and valid"
+    },
+    {
+      "id": "I3-bin",
+      "suite": "smoke",
+      "match": [
+        "I3 bundled binaries"
+      ],
+      "title": "Bundled binaries present",
+      "steps": [
+        "Inspect app Contents/Resources/runtime/bin",
+        "Check python3, ffmpeg, zotify, zotify-postprocess.py, OzDownloader binary"
+      ],
+      "expected": "All required binaries exist"
+    },
+    {
+      "id": "I3-imports",
+      "suite": "smoke",
+      "match": [
+        "I3 python imports"
+      ],
+      "title": "Bundled Python imports",
+      "steps": [
+        "Import zotify, mutagen, requests with bundled python3"
+      ],
+      "expected": "Imports succeed"
+    },
+    {
+      "id": "I3-ffmpeg",
+      "suite": "smoke",
+      "match": [
+        "I3 ffmpeg runs"
+      ],
+      "title": "Bundled ffmpeg runs",
+      "steps": [
+        "Run ffmpeg -version from app runtime"
+      ],
+      "expected": "ffmpeg prints version"
+    },
+    {
+      "id": "S1-prefs",
+      "suite": "smoke",
+      "match": [
+        "S1 Preferences has no Dependencies"
+      ],
+      "title": "Preferences \u2014 no Dependencies card",
+      "steps": [
+        "Scan SettingsView.swift for Dependencies / Ready to sign in"
+      ],
+      "expected": "Those UI blocks are absent"
+    },
+    {
+      "id": "S1-getmusic",
+      "suite": "smoke",
+      "match": [
+        "S1 Get Music has no Save as"
+      ],
+      "title": "Get Music \u2014 no Save as section",
+      "steps": [
+        "Scan DownloadView for Save as UI"
+      ],
+      "expected": "Save as section removed"
+    },
+    {
+      "id": "S3",
+      "suite": "smoke",
+      "match": [
+        "S3 settings defaults"
+      ],
+      "title": "Settings defaults persist",
+      "steps": [
+        "Read ~/Library/Application Support/OzDownloader/settings.json",
+        "Check flac + convert + skipExisting defaults"
+      ],
+      "expected": "Expected defaults present"
+    },
+    {
+      "id": "D1",
+      "suite": "smoke",
+      "match": [
+        "D1 no loose audio"
+      ],
+      "title": "Music root has no loose audio",
+      "steps": [
+        "List ~/Music/Oz Downloader",
+        "Fail if audio files sit directly in the root (not in playlist folders)"
+      ],
+      "expected": "Audio only inside playlist/artist folders"
+    },
+    {
+      "id": "C1-C2-fixture",
+      "suite": "smoke",
+      "match": [
+        "C1/C2 convert produces FLAC"
+      ],
+      "title": "Convert fixture \u2192 FLAC",
+      "steps": [
+        "Create short OGG fixture with ffmpeg",
+        "Run zotify-postprocess --format flac",
+        "Count FLAC vs leftover OGG"
+      ],
+      "expected": "FLAC present; OGG removed"
+    },
+    {
+      "id": "C3",
+      "suite": "smoke",
+      "match": [
+        "C3 genre tag"
+      ],
+      "title": "Genre tag written into FLAC",
+      "steps": [
+        "Convert with genre metadata",
+        "Inspect FLAC tags for Afrobeats (or configured genre)"
+      ],
+      "expected": "Genre tag present"
+    },
+    {
+      "id": "A1-D1-live",
+      "suite": "smoke",
+      "match": [
+        "A1/D1 live zotify download"
+      ],
+      "title": "Live track download into playlist folder",
+      "steps": [
+        "Download public track with signed-in credentials",
+        "Confirm file lands under a folder (not only loose)"
+      ],
+      "expected": "\u22651 audio file downloaded"
+    },
+    {
+      "id": "C1-C2-live",
+      "suite": "smoke",
+      "match": [
+        "C1/C2 live convert after download"
+      ],
+      "title": "Live convert after download",
+      "steps": [
+        "Run postprocess convert on the live download folder",
+        "Confirm FLAC output"
+      ],
+      "expected": "FLAC produced from live OGG"
+    },
+    {
+      "id": "I2-manual-skip",
+      "suite": "smoke",
+      "match": [
+        "I2 Gatekeeper"
+      ],
+      "title": "I2 Gatekeeper (recorded as manual skip)",
+      "steps": [
+        "Right-click \u2192 Open if Gatekeeper blocks"
+      ],
+      "expected": "Manual \u2014 skipped in automated run"
+    },
+    {
+      "id": "A2-A3-manual-skip",
+      "suite": "smoke",
+      "match": [
+        "A2/A3 sign-out"
+      ],
+      "title": "A2/A3 OAuth UI (manual skip)",
+      "steps": [
+        "Sign out",
+        "Mid-download auth UI"
+      ],
+      "expected": "Manual \u2014 skipped in automated run"
+    },
+    {
+      "id": "G1-G4-manual-skip",
+      "suite": "smoke",
+      "match": [
+        "G1\u2013G4 Get Music UI"
+      ],
+      "title": "G1\u2013G4 Get Music UI (manual skip)",
+      "steps": [
+        "Preview, queue, album/track, invalid URL in UI"
+      ],
+      "expected": "Manual \u2014 skipped in automated run"
+    },
+    {
+      "id": "D2-D4-manual-skip",
+      "suite": "smoke",
+      "match": [
+        "D2/D3/D4 progress UI"
+      ],
+      "title": "D2/D3/D4 Progress UI (manual skip)",
+      "steps": [
+        "Progress honesty, skip UI, open folder button"
+      ],
+      "expected": "Manual \u2014 skipped in automated run"
+    },
+    {
+      "id": "C4-manual-skip",
+      "suite": "smoke",
+      "match": [
+        "C4 convert-off"
+      ],
+      "title": "C4 convert off (manual skip)",
+      "steps": [
+        "Turn convert OFF in Preferences",
+        "Download"
+      ],
+      "expected": "Manual \u2014 skipped in automated run"
+    },
+    {
+      "id": "X-manual-skip",
+      "suite": "smoke",
+      "match": [
+        "X1\u2013X3 cancel"
+      ],
+      "title": "X1\u2013X3 cancel/network UI (manual skip)",
+      "steps": [
+        "Cancel UX and network drop in the app UI"
+      ],
+      "expected": "Manual \u2014 skipped in automated run (covered in downloads suite for process kill)"
+    },
+    {
+      "id": "P-manual-skip",
+      "suite": "smoke",
+      "match": [
+        "P1\u2013P3 My Playlists UI"
+      ],
+      "title": "P1\u2013P3 My Playlists UI (manual skip)",
+      "steps": [
+        "Load library, download from list UI, remembered playlists"
+      ],
+      "expected": "Manual \u2014 skipped in automated run"
+    },
+    {
+      "id": "S2-manual-skip",
+      "suite": "smoke",
+      "match": [
+        "S2 change folder"
+      ],
+      "title": "S2 change folder UI (manual skip)",
+      "steps": [
+        "Change download folder in Preferences UI"
+      ],
+      "expected": "Manual \u2014 skipped in automated run"
+    },
+    {
+      "id": "R3-manual-skip",
+      "suite": "smoke",
+      "match": [
+        "R3 second Mac"
+      ],
+      "title": "R3 second Mac (manual skip)",
+      "steps": [
+        "Install DMG on another Mac",
+        "Sign in",
+        "Download one song"
+      ],
+      "expected": "Manual \u2014 skipped in automated run"
+    },
+    {
+      "id": "L0",
+      "suite": "downloads",
+      "match": [
+        "L0 download before login"
+      ],
+      "title": "Download before login",
+      "steps": [
+        "Temporarily move credentials.json aside",
+        "Attempt track download with empty/missing session (25s timeout)",
+        "Restore credentials"
+      ],
+      "expected": "No audio files written; fails cleanly or times out"
+    },
+    {
+      "id": "L1",
+      "suite": "downloads",
+      "match": [
+        "L1/GM-track after login"
+      ],
+      "title": "Get Music \u2014 single track after login",
+      "steps": [
+        "Ensure credentials.json present",
+        "Download public track URL via bundled zotify into a temp root",
+        "Count audio files on disk"
+      ],
+      "expected": "\u22651 audio file downloaded"
+    },
+    {
+      "id": "GM-playlist",
+      "suite": "downloads",
+      "match": [
+        "GM-playlist"
+      ],
+      "title": "Get Music \u2014 full playlist",
+      "steps": [
+        "Download Pil\u00e9 - Gospel playlist URL",
+        "Wait for zotify to finish",
+        "Count audio files"
+      ],
+      "expected": "\u22653 tracks on disk"
+    },
+    {
+      "id": "MP-playlist",
+      "suite": "downloads",
+      "match": [
+        "MP-playlist"
+      ],
+      "title": "My Playlists path \u2014 playlist URL",
+      "steps": [
+        "Invoke same zotify backend used by My Playlists row download",
+        "Download Pil\u00e9 - Gospel into a separate folder",
+        "Count audio files"
+      ],
+      "expected": "\u22651 audio file (same backend as Get Music)"
+    },
+    {
+      "id": "P2",
+      "suite": "downloads",
+      "match": [
+        "P2 two lists"
+      ],
+      "title": "Two lists sequential (queue of 2)",
+      "steps": [
+        "Download Pil\u00e9 fully into list-1 folder",
+        "Start \u0631\u0648\u0627\u0642\u0629 into list-2 folder",
+        "Stop list-2 after \u22651 file (partial second queue item)",
+        "Count both folders"
+      ],
+      "expected": "list-1 \u22651 and list-2 \u22651 from two distinct playlist URLs"
+    },
+    {
+      "id": "X1",
+      "suite": "downloads",
+      "match": [
+        "X1 cancel list"
+      ],
+      "title": "Cancel playlist mid-download",
+      "steps": [
+        "Start \u0631\u0648\u0627\u0642\u0629 download in background",
+        "Wait until first file appears (or timeout)",
+        "Send SIGTERM/SIGKILL (app Cancel equivalent)",
+        "Confirm process stopped"
+      ],
+      "expected": "Process terminated; partial download OK"
+    },
+    {
+      "id": "X2",
+      "suite": "downloads",
+      "match": [
+        "X2 cancel track"
+      ],
+      "title": "Cancel track mid-download",
+      "steps": [
+        "Start single-track download in background",
+        "Quickly SIGTERM the process",
+        "Confirm process gone"
+      ],
+      "expected": "Process terminated (or skipped if finished too fast)"
+    },
+    {
+      "id": "D5",
+      "suite": "downloads",
+      "match": [
+        "DL-full"
+      ],
+      "title": "Full list download (Pil\u00e9)",
+      "steps": [
+        "Download entire Pil\u00e9 - Gospel playlist to a clean folder",
+        "Retry once on audio-key flakes",
+        "Fall back to earlier full seed in same run if needed",
+        "Count OGG files"
+      ],
+      "expected": "3 tracks on disk"
+    },
+    {
+      "id": "D6",
+      "suite": "downloads",
+      "match": [
+        "DL-partial"
+      ],
+      "title": "Partial list download",
+      "steps": [
+        "Start Pil\u00e9 download",
+        "Cancel after first track appears",
+        "Count files vs full list size (3)"
+      ],
+      "expected": "1 \u2264 n < 3 files (incomplete)"
+    },
+    {
+      "id": "D7",
+      "suite": "downloads",
+      "match": [
+        "DL-exist unconverted"
+      ],
+      "title": "Existed unconverted list (re-download OGGs)",
+      "steps": [
+        "Seed folder with full Pil\u00e9 OGGs + .song_ids",
+        "Re-run download into the same folder",
+        "Compare file counts and SKIPPING/DOWNLOADED log lines"
+      ],
+      "expected": "All tracks skipped; same OGG count; no duplicates"
+    },
+    {
+      "id": "D8-setup",
+      "suite": "downloads",
+      "match": [
+        "DL-exist converted setup"
+      ],
+      "title": "Existed converted \u2014 convert OGGs to FLAC",
+      "steps": [
+        "Copy unconverted Pil\u00e9 folder",
+        "Run zotify-postprocess --format flac",
+        "Count FLAC vs leftover OGG"
+      ],
+      "expected": "\u22653 FLAC, 0 OGG"
+    },
+    {
+      "id": "D8-redownload",
+      "suite": "downloads",
+      "match": [
+        "DL-exist converted re-download"
+      ],
+      "title": "Existed converted \u2014 re-download FLACs",
+      "steps": [
+        "Re-run zotify on folder that already has FLACs",
+        "Check SKIPPING vs DOWNLOADED",
+        "Confirm FLAC count unchanged and no new OGGs"
+      ],
+      "expected": "Skips; FLACs kept; 0 OGG"
+    },
+    {
+      "id": "D8-reconvert",
+      "suite": "downloads",
+      "match": [
+        "DL-exist converted re-convert"
+      ],
+      "title": "Existed converted \u2014 re-convert no-op",
+      "steps": [
+        "Run postprocess convert again on FLAC-only folder",
+        "Confirm still FLAC-only"
+      ],
+      "expected": "Still \u22653 FLAC, 0 OGG"
+    },
+    {
+      "id": "FMT-flac",
+      "suite": "downloads",
+      "match": [
+        "FMT flac \u2014"
+      ],
+      "title": "Convert format \u2014 FLAC",
+      "steps": [
+        "Create fixture OGG",
+        "Convert with postprocess --format flac",
+        "Assert .flac present, no leftover .ogg"
+      ],
+      "expected": "1+ .flac, 0 .ogg"
+    },
+    {
+      "id": "FMT-mp3",
+      "suite": "downloads",
+      "match": [
+        "FMT mp3 \u2014"
+      ],
+      "title": "Convert format \u2014 MP3",
+      "steps": [
+        "Create fixture OGG",
+        "Convert --format mp3",
+        "Assert .mp3 present"
+      ],
+      "expected": "1+ .mp3, 0 .ogg"
+    },
+    {
+      "id": "FMT-m4a",
+      "suite": "downloads",
+      "match": [
+        "FMT m4a \u2014"
+      ],
+      "title": "Convert format \u2014 M4A",
+      "steps": [
+        "Create fixture OGG",
+        "Convert --format m4a",
+        "Assert .m4a present"
+      ],
+      "expected": "1+ .m4a, 0 .ogg"
+    },
+    {
+      "id": "FMT-wav",
+      "suite": "downloads",
+      "match": [
+        "FMT wav \u2014"
+      ],
+      "title": "Convert format \u2014 WAV",
+      "steps": [
+        "Create fixture OGG",
+        "Convert --format wav",
+        "Assert .wav present"
+      ],
+      "expected": "1+ .wav, 0 .ogg"
+    },
+    {
+      "id": "FMT-ogg",
+      "suite": "downloads",
+      "match": [
+        "FMT ogg"
+      ],
+      "title": "Convert format \u2014 OGG keep",
+      "steps": [
+        "Keep fixture as OGG / process with --format ogg",
+        "Assert audio remains"
+      ],
+      "expected": "OGG retained"
+    },
+    {
+      "id": "FMT-none",
+      "suite": "downloads",
+      "match": [
+        "FMT none"
+      ],
+      "title": "Convert format \u2014 none (Don\u2019t convert)",
+      "steps": [
+        "Simulate convert OFF (no postprocess call)",
+        "Assert original OGG untouched"
+      ],
+      "expected": "OGG left as-is"
+    },
+    {
+      "id": "REAL-FMT-matrix",
+      "suite": "downloads",
+      "match": [
+        "REAL-FMT matrix"
+      ],
+      "title": "Real Spotify OGG format matrix",
+      "steps": [
+        "Re-download a fresh track OGG for format tests",
+        "Convert copies to flac / mp3 / m4a / wav"
+      ],
+      "expected": "Each format produces output from real Spotify OGG (may skip if audio-key errors leave no OGG)"
+    },
+    {
+      "id": "REAL-FMT-flac",
+      "suite": "downloads",
+      "match": [
+        "REAL-FMT flac"
+      ],
+      "title": "Real Spotify OGG \u2192 FLAC",
+      "steps": [
+        "Download real Spotify track as OGG",
+        "Convert to flac",
+        "Assert output"
+      ],
+      "expected": ".flac produced from cover-art OGG"
+    },
+    {
+      "id": "REAL-FMT-mp3",
+      "suite": "downloads",
+      "match": [
+        "REAL-FMT mp3"
+      ],
+      "title": "Real Spotify OGG \u2192 MP3",
+      "steps": [
+        "Copy real Spotify OGG",
+        "Convert to mp3",
+        "Assert output"
+      ],
+      "expected": ".mp3 produced"
+    },
+    {
+      "id": "REAL-FMT-m4a",
+      "suite": "downloads",
+      "match": [
+        "REAL-FMT m4a"
+      ],
+      "title": "Real Spotify OGG \u2192 M4A",
+      "steps": [
+        "Copy real Spotify OGG (often has MJPEG cover stream)",
+        "Convert with map_metadata -1 + audio map",
+        "Assert .m4a"
+      ],
+      "expected": ".m4a produced without hang/fail"
+    },
+    {
+      "id": "REAL-FMT-wav",
+      "suite": "downloads",
+      "match": [
+        "REAL-FMT wav"
+      ],
+      "title": "Real Spotify OGG \u2192 WAV",
+      "steps": [
+        "Copy real Spotify OGG",
+        "Convert to wav",
+        "Assert output"
+      ],
+      "expected": ".wav produced"
+    },
+    {
+      "id": "G1",
+      "suite": "ui",
+      "match": [
+        "G1"
+      ],
+      "title": "Get Music playlist preview",
+      "steps": [
+        "Open Get Music",
+        "Paste playlist URL",
+        "Wait for preview"
+      ],
+      "expected": "Preview title/tracks visible"
+    },
+    {
+      "id": "G2",
+      "suite": "ui",
+      "match": [
+        "G2"
+      ],
+      "title": "Get Music download",
+      "steps": [
+        "Paste playlist",
+        "Tap Download",
+        "See Progress"
+      ],
+      "expected": "Progress/Cancel appears"
+    },
+    {
+      "id": "G3",
+      "suite": "ui",
+      "match": [
+        "G3"
+      ],
+      "title": "Get Music track URL",
+      "steps": [
+        "Paste track URL",
+        "Wait for preview"
+      ],
+      "expected": "Track preview ready"
+    },
+    {
+      "id": "G4",
+      "suite": "ui",
+      "match": [
+        "G4"
+      ],
+      "title": "Invalid URL",
+      "steps": [
+        "Paste non-Spotify text"
+      ],
+      "expected": "Error or no download"
+    },
+    {
+      "id": "D2",
+      "suite": "ui",
+      "match": [
+        "D2"
+      ],
+      "title": "Progress honesty",
+      "steps": [
+        "Start download",
+        "Observe progress UI"
+      ],
+      "expected": "Progress/cancel visible"
+    },
+    {
+      "id": "D4",
+      "suite": "ui",
+      "match": [
+        "D4"
+      ],
+      "title": "Open default folder",
+      "steps": [
+        "Click Open default download folder"
+      ],
+      "expected": "Button works / Finder opens"
+    },
+    {
+      "id": "X3",
+      "suite": "ui",
+      "match": [
+        "X3"
+      ],
+      "title": "Network drop",
+      "steps": [
+        "Start download",
+        "Flip Wi-Fi",
+        "Restore"
+      ],
+      "expected": "Error/recover; gated on OZ_E2E_ALLOW_NETWORK_FLIP"
+    },
+    {
+      "id": "C4",
+      "suite": "ui",
+      "match": [
+        "C4"
+      ],
+      "title": "Convert off toggle",
+      "steps": [
+        "Preferences",
+        "Toggle convert off"
+      ],
+      "expected": "Toggle changes"
+    },
+    {
+      "id": "S2",
+      "suite": "ui",
+      "match": [
+        "S2"
+      ],
+      "title": "Change download folder",
+      "steps": [
+        "Preferences",
+        "Set root path"
+      ],
+      "expected": "Path updated"
+    },
+    {
+      "id": "P1",
+      "suite": "ui",
+      "match": [
+        "P1"
+      ],
+      "title": "Load My Playlists",
+      "steps": [
+        "Open My Playlists",
+        "Refresh"
+      ],
+      "expected": "Rows or status"
+    },
+    {
+      "id": "P3",
+      "suite": "ui",
+      "match": [
+        "P3"
+      ],
+      "title": "Playlists after Get Music",
+      "steps": [
+        "Use Get Music",
+        "Open My Playlists"
+      ],
+      "expected": "Tab still works"
+    },
+    {
+      "id": "A2",
+      "suite": "ui",
+      "match": [
+        "A2"
+      ],
+      "title": "Sign out",
+      "steps": [
+        "Preferences",
+        "Sign out",
+        "Confirm"
+      ],
+      "expected": "Signed out UI / creds cleared"
+    },
+    {
+      "id": "A1",
+      "suite": "ui",
+      "match": [
+        "A1"
+      ],
+      "title": "Sign in OAuth",
+      "steps": [
+        "Sign in",
+        "oauth_browser_helper with env creds"
+      ],
+      "expected": "Signed in; needs OZ_E2E_SPOTIFY_*"
+    },
+    {
+      "id": "A3",
+      "suite": "ui",
+      "match": [
+        "A3"
+      ],
+      "title": "Mid-download auth",
+      "steps": [
+        "Sign out",
+        "Start download",
+        "Observe OAuth handoff"
+      ],
+      "expected": "Handoff UI; needs OZ_E2E_SPOTIFY_*"
+    },
+    {
+      "id": "I2",
+      "suite": "ui",
+      "match": [
+        "I2"
+      ],
+      "title": "Gatekeeper quarantine launch",
+      "steps": [
+        "Copy app",
+        "Apply quarantine",
+        "open"
+      ],
+      "expected": "Process starts (right-click dialog manual)"
+    },
+    {
+      "id": "R3",
+      "suite": "ui",
+      "match": [
+        "R3"
+      ],
+      "title": "Second Mac",
+      "steps": [
+        "Install on another Mac"
+      ],
+      "expected": "Manual forever"
+    }
+  ],
+  "manual": [
+    {
+      "id": "I2-dialog",
+      "title": "Gatekeeper Right-click \u2192 Open dialog",
+      "steps": [
+        "When macOS blocks quarantine open",
+        "Right-click \u2192 Open"
+      ],
+      "expected": "App opens after confirmation"
+    },
+    {
+      "id": "R3",
+      "title": "Second Mac physical install",
+      "steps": [
+        "Copy DMG to another Mac",
+        "Install, sign in, download"
+      ],
+      "expected": "Works without Terminal"
+    }
+  ]
+}

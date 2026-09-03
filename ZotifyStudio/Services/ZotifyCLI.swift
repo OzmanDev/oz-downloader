@@ -21,7 +21,16 @@ struct CommandResult {
 }
 
 enum ZotifyCLI {
+
     static func which(_ name: String) -> URL? {
+        // Prefer tools bundled inside the .app so friends need no Terminal setup.
+        if let runtime = AppPaths.bundledRuntimeDir {
+            let bundled = runtime.appendingPathComponent("bin/\(name)")
+            if FileManager.default.isExecutableFile(atPath: bundled.path) {
+                return bundled
+            }
+        }
+
         let paths = [
             NSHomeDirectory() + "/bin/" + name,
             "/opt/anaconda3/bin/" + name,
@@ -64,9 +73,57 @@ enum ZotifyCLI {
         }
         return nil
     }
+
+    /// Prefer a Python that can `import zotify` (needed for Spotify sign-in / metadata).
+    static var pythonWithZotifyURL: URL? {
+        if let bundled = AppPaths.bundledPythonURL {
+            let proc = Process()
+            proc.executableURL = bundled
+            proc.arguments = ["-c", "import zotify"]
+            proc.standardOutput = Pipe()
+            proc.standardError = Pipe()
+            do {
+                try proc.run()
+                proc.waitUntilExit()
+                if proc.terminationStatus == 0 { return bundled }
+            } catch {}
+        }
+
+        var candidates: [String] = []
+        if let anaconda = anacondaPythonURL?.path { candidates.append(anaconda) }
+        candidates += [
+            NSHomeDirectory() + "/bin/python3",
+            "/opt/homebrew/bin/python3",
+            "/usr/local/bin/python3",
+            "/usr/bin/python3",
+        ]
+        if let whichPy = which("python3")?.path { candidates.insert(whichPy, at: 0) }
+        var seen = Set<String>()
+        for path in candidates where seen.insert(path).inserted {
+            guard FileManager.default.isExecutableFile(atPath: path) else { continue }
+            // Skip the bare name lookup that resolved to our wrapper script path without zotify.
+            if path.hasSuffix("/bin/python3"), path.contains("/Oz Downloader.app/") {
+                continue
+            }
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: path)
+            proc.arguments = ["-c", "import zotify"]
+            proc.standardOutput = Pipe()
+            proc.standardError = Pipe()
+            do {
+                try proc.run()
+                proc.waitUntilExit()
+                if proc.terminationStatus == 0 {
+                    return URL(fileURLWithPath: path)
+                }
+            } catch {}
+        }
+        return nil
+    }
     /// Prefer the real package binary to avoid interactive wrapper prompts
     /// (and to avoid the terminal wrapper that shares CLI playlists/config).
     static var realZotifyURL: URL? {
+        if let bundled = AppPaths.bundledZotifyURL { return bundled }
         let candidates = [
             "/opt/anaconda3/bin/zotify",
             NSHomeDirectory() + "/.local/bin/zotify",
@@ -139,14 +196,18 @@ enum ZotifyCLI {
         env["PYTHONUNBUFFERED"] = "1"
         env["TQDM_MININTERVAL"] = "0.1"
         // GUI apps get a minimal PATH — make sure Homebrew ffmpeg / Anaconda tools resolve.
+        // Bundled runtime first so the notarized DMG works without Terminal setup.
         // Anaconda before Homebrew so `python3` scripts keep mutagen/zotify deps.
-        let pathExtras = [
+        var pathExtras = [
             NSHomeDirectory() + "/bin",
             "/opt/anaconda3/bin",
             "/opt/homebrew/bin",
             "/usr/local/bin",
             NSHomeDirectory() + "/.local/bin",
         ]
+        if let runtimeBin = AppPaths.bundledRuntimeDir?.appendingPathComponent("bin").path {
+            pathExtras.insert(runtimeBin, at: 0)
+        }
         let existingPath = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
         env["PATH"] = (pathExtras + [existingPath]).joined(separator: ":")
         proc.environment = env
@@ -243,7 +304,24 @@ enum ZotifyCLI {
 
         while proc.isRunning {
             if isCancelled?() == true {
+                // Spotify/librespot often ignores SIGTERM — escalate like stallTimeout.
                 proc.terminate()
+                Thread.sleep(forTimeInterval: 0.35)
+                if proc.isRunning {
+                    proc.interrupt()
+                    kill(proc.processIdentifier, SIGKILL)
+                }
+                // Kill child helpers (ffmpeg etc.) that may outlive the wrapper.
+                let pid = proc.processIdentifier
+                if pid > 0 {
+                    let pkill = Process()
+                    pkill.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+                    pkill.arguments = ["-KILL", "-P", String(pid)]
+                    pkill.standardOutput = Pipe()
+                    pkill.standardError = Pipe()
+                    try? pkill.run()
+                    pkill.waitUntilExit()
+                }
                 break
             }
             if stallHeartbeat?() == true {

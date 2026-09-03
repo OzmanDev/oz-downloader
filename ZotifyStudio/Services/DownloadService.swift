@@ -20,24 +20,44 @@ struct SongDownloadItem: Identifiable, Equatable {
         case failed
     }
 
+    /// Why a row was skipped — shown in Progress details.
+    enum SkipReason: Equatable {
+        case none
+        case duplicate          // same song appears again in the playlist
+        case alreadySaved       // skip-existing / already on disk
+        case cancelled
+    }
+
     let id: Int
     var number: Int
     var name: String
     var status: Status
     var fraction: Double
     var trackId: String
+    var skipReason: SkipReason
 
     var isFinished: Bool {
         status == .done || status == .skipped || status == .failed
     }
 
-    init(id: Int, number: Int, name: String, status: Status, fraction: Double, trackId: String = "") {
+    var isDuplicateSkip: Bool { status == .skipped && skipReason == .duplicate }
+
+    init(
+        id: Int,
+        number: Int,
+        name: String,
+        status: Status,
+        fraction: Double,
+        trackId: String = "",
+        skipReason: SkipReason = .none
+    ) {
         self.id = id
         self.number = number
         self.name = name
         self.status = status
         self.fraction = fraction
         self.trackId = trackId
+        self.skipReason = skipReason
     }
 }
 
@@ -85,11 +105,26 @@ enum DownloadTabBadge: Equatable {
     case failure
 }
 
+/// What the download worker is doing right now — drives Progress status copy.
+enum DownloadPhase: Equatable {
+    case idle
+    case starting
+    case fetchingTrackInfo
+    case checkingExisting
+    case downloading
+    case converting
+    case signingIn
+    case retrying
+    case stopping
+}
+
 @MainActor
 final class DownloadService: ObservableObject {
     @Published var logText: String = ""
     @Published var isRunning = false
     @Published var statusMessage: String = ""
+    /// High-level activity for Progress UI (checking vs downloading vs converting).
+    @Published var downloadPhase: DownloadPhase = .idle
     /// Playlist-load status only (kept separate so downloads don’t pollute My Playlists).
     @Published var playlistStatusMessage: String = ""
     @Published var songItems: [SongDownloadItem] = []
@@ -122,12 +157,101 @@ final class DownloadService: ObservableObject {
     /// Set when a download starts so ContentView can switch to Get Music (Progress lives there).
     @Published var requestShowGetMusic = false
 
+    /// Short label for the Progress header / queue “Now” row.
+    var phaseStatusLabel: String {
+        let playlist = queueItems.indices.contains(currentQueueIndex)
+            ? queueItems[currentQueueIndex].name
+            : ""
+        switch downloadPhase {
+        case .idle:
+            return statusMessage.isEmpty ? "" : statusMessage
+        case .starting:
+            return playlist.isEmpty ? "Starting…" : "Starting \(playlist)…"
+        case .fetchingTrackInfo:
+            return "Fetching track list…"
+        case .checkingExisting:
+            return playlist.isEmpty ? "Checking existing songs…" : "Checking \(playlist)…"
+        case .downloading:
+            return playlist.isEmpty ? "Downloading…" : "Downloading \(playlist)…"
+        case .converting:
+            return convertLabel.isEmpty ? "Converting…" : convertLabel
+        case .signingIn:
+            return "Sign in with Spotify…"
+        case .retrying:
+            return retryStatusMessage.isEmpty
+                ? (playlist.isEmpty ? "Retrying…" : "Retrying \(playlist)…")
+                : retryStatusMessage
+        case .stopping:
+            return "Cancelling…"
+        }
+    }
+
+    /// One-line Progress summary under the card title.
+    var phaseProgressSummary: String {
+        let finished = songItems.filter(\.isFinished).count
+        let expected = max(totalExpected, songItems.count, 0)
+        let skipped = songItems.filter { $0.status == .skipped && $0.skipReason == .alreadySaved }.count
+        let downloaded = songItems.filter { $0.status == .done }.count
+        switch downloadPhase {
+        case .idle:
+            return ""
+        case .starting:
+            return "Getting ready…"
+        case .fetchingTrackInfo:
+            return "Loading song titles from Spotify…"
+        case .checkingExisting:
+            if expected > 0 {
+                return "Checking which songs you already have (\(finished) of \(expected) found). You can leave this window open."
+            }
+            return "Checking which songs you already have. You can leave this window open."
+        case .downloading:
+            if expected > 0 {
+                var parts: [String] = []
+                if skipped > 0 { parts.append("\(skipped) already on disk") }
+                if downloaded > 0 { parts.append("\(downloaded) new") }
+                let detail = parts.isEmpty
+                    ? "\(finished) of \(expected) saved"
+                    : "\(finished) of \(expected) saved · " + parts.joined(separator: ", ")
+                return "Downloading new songs (\(detail)). You can leave this window open."
+            }
+            return "Downloading new songs. You can leave this window open."
+        case .converting:
+            return convertLabel.isEmpty
+                ? "Converting downloaded files to FLAC, embedding lyrics, and renaming…"
+                : convertLabel
+        case .signingIn:
+            return "Complete Spotify sign-in in your browser, then this will continue."
+        case .retrying:
+            return retryStatusMessage.isEmpty
+                ? "Connection issue — retrying…"
+                : retryStatusMessage
+        case .stopping:
+            return "Stopping…"
+        }
+    }
+
+    private func setPhase(_ phase: DownloadPhase) {
+        downloadPhase = phase
+        switch phase {
+        case .idle:
+            break
+        case .starting, .fetchingTrackInfo, .checkingExisting, .downloading,
+             .converting, .signingIn, .retrying, .stopping:
+            statusMessage = phaseStatusLabel
+        }
+    }
     private var cancelFlag = CancellationFlag()
     /// Skip the current playlist and continue the queue.
     private var skipPlaylistFlag = CancellationFlag()
     /// Skip the current song and continue remaining songs.
     private var skipSongFlag = CancellationFlag()
     private var signInCancelFlag = CancellationFlag()
+    /// True while zotify printed a Spotify authorize URL and is waiting on the browser.
+    private var awaitingSpotifyLogin = CancellationFlag()
+    /// Abort current zotify so we can run the polished Preferences OAuth flow instead.
+    private var reauthHandoff = CancellationFlag()
+    /// Store for mid-download sign-in handoff (same success page as manual login).
+    private weak var activeStore: AppStore?
     private var activeSongIndex: Int?
     private var downloadHadError = false
     private var toastHideTask: Task<Void, Never>?
@@ -135,22 +259,43 @@ final class DownloadService: ObservableObject {
     private var songCountLocked = false
     private var sessionTrackIds: [String] = []
     private var lastZotifyOutput = ""
+    /// Avoid spamming Spotify title lookups while tqdm advances.
+    private var titlePrefetchInFlight = false
+    /// Used so live disk sync can tell “already on disk” vs “just downloaded”.
+    private var jobStartedAt = Date.distantPast
+    /// Music root for the active download job (for disk recovery helpers).
+    private var activeMusicRoot = ""
+    /// Titles / track ids that existed before the current playlist attempt started.
+    private var preexistingAudioTitleKeys = Set<String>()
+    private var preexistingTrackIds = Set<String>()
 
     var totalFraction: Double {
-        if totalExpected > 0 {
-            let base = Double(totalCompleted) / Double(totalExpected)
-            if let idx = activeSongIndex, songItems.indices.contains(idx), !songItems[idx].isFinished {
-                return min(1, base + (songItems[idx].fraction / Double(totalExpected)))
+        if isConverting {
+            return min(1, max(0.05, convertFraction))
+        }
+        let expected = max(totalExpected, songItems.count, 1)
+        let finished = songItems.filter(\.isFinished).count
+        if expected > 0 {
+            var fraction = Double(finished) / Double(expected)
+            if let idx = activeSongIndex, songItems.indices.contains(idx), songItems[idx].status == .downloading {
+                fraction = min(1, fraction + (songItems[idx].fraction / Double(expected)))
             }
-            return min(1, base)
+            return min(1, fraction)
         }
         if isRunning { return 0.02 }
         return songItems.isEmpty ? 0 : (songItems.allSatisfy(\.isFinished) ? 1 : 0)
     }
 
+    private func refreshTotalProgressFromSongs() {
+        let expected = max(totalExpected, songItems.count, 1)
+        totalExpected = expected
+        totalCompleted = min(expected, songItems.filter(\.isFinished).count)
+    }
+
     func clearLog() {
         logText = ""
         statusMessage = ""
+        downloadPhase = .idle
         songItems = []
         queueItems = []
         currentQueueIndex = 0
@@ -213,20 +358,85 @@ final class DownloadService: ObservableObject {
     }
 
     /// Kill leftover zotify / hung Spotify sessions that block new downloads.
-    nonisolated static func killOrphanZotifyProcesses() {
+    nonisolated static func killOrphanZotifyProcesses() -> Bool {
         let patterns = [
             "/opt/anaconda3/bin/zotify",
             "from zotify.config import Zotify",
-            "UserPlaylist('gui')"
+            "UserPlaylist('gui')",
+            "-m zotify",
+            "Oz Downloader.app/Contents/Resources/runtime/bin/python",
+            "Oz Downloader.app/Contents/Resources/runtime/bin/zotify",
+            "Contents/Resources/runtime/bin/python",
+            "Contents/Resources/runtime/bin/zotify"
         ]
+        // Parallel pkills — sequential waitUntilExit made every download start feel slow.
+        let group = DispatchGroup()
         for pattern in patterns {
+            group.enter()
+            DispatchQueue.global(qos: .utility).async {
+                let task = Process()
+                task.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+                task.arguments = ["-f", pattern]
+                task.standardOutput = Pipe()
+                task.standardError = Pipe()
+                try? task.run()
+                task.waitUntilExit()
+                group.leave()
+            }
+        }
+        // Must wait for all pkills — timing out let late kills murder the new download.
+        let waitResult = group.wait(timeout: .now() + 5.0)
+        return waitResult == .timedOut
+    }
+
+    /// True when a leftover zotify-like process is still around (cheap check before killing).
+    nonisolated static func hasOrphanZotifyProcesses() -> (Bool, String) {
+        let probes = [
+            "anaconda3/bin/zotify",
+            "-m zotify",
+            "UserPlaylist('gui')",
+            "Oz Downloader.app/Contents/Resources/runtime/bin/zotify",
+            "Oz Downloader.app/Contents/Resources/runtime/bin/python"
+        ]
+        for pattern in probes {
             let task = Process()
-            task.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
             task.arguments = ["-f", pattern]
-            task.standardOutput = Pipe()
+            let out = Pipe()
+            task.standardOutput = out
             task.standardError = Pipe()
             try? task.run()
             task.waitUntilExit()
+            if task.terminationStatus == 0 {
+                let data = out.fileHandleForReading.readDataToEndOfFile()
+                let pids = String(data: data, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return (true, "\(pattern) → \(pids)")
+            }
+        }
+        return (false, "")
+    }
+
+    /// Never call `killOrphanZotifyProcesses` on the main thread — `waitUntilExit` blanks the UI.
+    private func killOrphanZotifyProcessesAsync(source: String) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let killT0 = Date()
+            let timedOut = Self.killOrphanZotifyProcesses()
+        }
+    }
+
+    /// Kill leftovers *before* spawning a new download — must finish first (async race kills the new job).
+    private func killOrphanZotifyProcessesAwaiting(source: String) async {
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let killT0 = Date()
+                let (hadOrphans, probeHit) = Self.hasOrphanZotifyProcesses()
+                var timedOut = false
+                if hadOrphans {
+                    timedOut = Self.killOrphanZotifyProcesses()
+                }
+                cont.resume()
+            }
         }
     }
 
@@ -250,7 +460,8 @@ final class DownloadService: ObservableObject {
         cancelFlag.value = true
         skipPlaylistFlag.value = true
         skipSongFlag.value = true
-        Self.killOrphanZotifyProcesses()
+        showCelebration = false
+        killOrphanZotifyProcessesAsync(source: "stop")
         convertSkipped = true
         if convertLabel.isEmpty || convertLabel == "Convert cancelled" {
             convertLabel = "Convert skipped"
@@ -260,10 +471,16 @@ final class DownloadService: ObservableObject {
         }
         for i in songItems.indices where !songItems[i].isFinished {
             songItems[i].status = .skipped
+            songItems[i].skipReason = .cancelled
             songItems[i].fraction = 1
         }
+        for i in queueItems.indices where queueItems[i].status == .pending || queueItems[i].status == .downloading {
+            queueItems[i].status = .cancelled
+            queueItems[i].lastError = "Cancelled"
+        }
         totalCompleted = songItems.filter { $0.status == .done || $0.status == .skipped }.count
-        statusMessage = "Stopping…"
+        setPhase(.stopping)
+        showToast("Cancelled")
     }
 
     /// Cancel one playlist in the queue — skips it and continues with the rest.
@@ -275,10 +492,27 @@ final class DownloadService: ObservableObject {
         queueItems[index].lastError = "Cancelled"
         appendLog("Cancelled playlist — \(item.name)")
         showToast("Cancelled — \(item.name)")
+        showCelebration = false
+        let onlyOneActive = queueItems.filter {
+            $0.status == .pending || $0.status == .downloading || $0.id == item.id
+        }.count <= 1
         if index == currentQueueIndex, isRunning {
             skipPlaylistFlag.value = true
             skipSongFlag.value = true
-            statusMessage = "Skipping playlist…"
+            // Single playlist cancel should fully stop (same as Cancel), not “succeed”.
+            if onlyOneActive || queueItems.count == 1 {
+                cancelFlag.value = true
+                statusMessage = "Stopping…"
+                for i in songItems.indices where !songItems[i].isFinished {
+                    songItems[i].status = .skipped
+                    songItems[i].skipReason = .cancelled
+                    songItems[i].fraction = 1
+                }
+                totalCompleted = songItems.filter { $0.status == .done || $0.status == .skipped }.count
+            } else {
+                statusMessage = "Skipping playlist…"
+            }
+            killOrphanZotifyProcessesAsync(source: "cancelPlaylist")
         }
     }
 
@@ -286,16 +520,18 @@ final class DownloadService: ObservableObject {
     func cancelSong(id: Int) {
         guard let idx = songItems.firstIndex(where: { $0.id == id }) else { return }
         guard !songItems[idx].isFinished else { return }
+        let wasActive = (activeSongIndex == idx) || songItems[idx].status == .downloading
         songItems[idx].status = .skipped
+        songItems[idx].skipReason = .cancelled
         songItems[idx].fraction = 1
         appendLog("Skipped song — \(songItems[idx].name)")
         showToast("Skipped — \(songItems[idx].name)")
-        if activeSongIndex == idx, isRunning {
+        if wasActive, isRunning {
             skipSongFlag.value = true
             statusMessage = "Skipping song…"
-        } else if songItems[idx].status == .pending {
-            // Already marked skipped; download loop will ignore it.
+            killOrphanZotifyProcessesAsync(source: "cancelSong")
         }
+        // Pending songs: already marked skipped; track-by-track loop will ignore them.
     }
 
     /// Wipe Progress so a cancelled job never remains visible while the next one starts.
@@ -342,26 +578,52 @@ final class DownloadService: ObservableObject {
             items[i].status = .pending
             items[i].retryAttempt = 0
             items[i].lastError = ""
+            items[i].name = Self.sanitizePlaylistFolderName(items[i].name)
         }
         queueItems = items
         prepareProgress(expectedTracks: expectedTracks, trackNames: trackNames, trackIds: trackIds)
         if !items.isEmpty {
             beginQueueItem(at: 0)
-            statusMessage = "Downloading…"
+            setPhase(.starting)
         }
     }
 
     func prepareProgress(expectedTracks: Int, trackNames: [String], trackIds: [String] = []) {
-        let cleaned = trackNames.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        var cleaned = trackNames.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        var ids = trackIds
+
+        // Keep real titles/ids already shown (prepareJobUI + background prefetch).
+        // Callers often pass [] / "Song N" placeholders on retry and would wipe names.
+        let incomingHasRealTitles = cleaned.contains {
+            !$0.isEmpty && !$0.hasPrefix("Song ") && !$0.hasPrefix("Track ")
+        }
+        if !incomingHasRealTitles {
+            let existingNames = songItems.map(\.name)
+            if existingNames.contains(where: {
+                !$0.isEmpty && !$0.hasPrefix("Song ") && !$0.hasPrefix("Track ")
+            }) {
+                cleaned = existingNames
+            } else if cleaned.isEmpty, !existingNames.isEmpty {
+                cleaned = existingNames
+            }
+        }
+        if ids.allSatisfy(\.isEmpty) {
+            let existingIds = songItems.map(\.trackId)
+            if existingIds.contains(where: { !$0.isEmpty }) {
+                ids = existingIds
+            } else if !sessionTrackIds.isEmpty {
+                ids = sessionTrackIds
+            }
+        }
+
         let known = cleaned.filter { !$0.isEmpty && !$0.hasPrefix("Song ") }
-        let ids = trackIds
-        sessionTrackIds = ids
+        sessionTrackIds = ids.filter { !$0.isEmpty }.isEmpty ? sessionTrackIds : ids
         let count: Int
-        if !ids.isEmpty {
-            count = ids.count
+        if !ids.filter({ !$0.isEmpty }).isEmpty {
+            count = max(ids.count, expectedTracks, cleaned.count, 1)
             songCountLocked = true
         } else if !known.isEmpty {
-            count = max(known.count, cleaned.filter { !$0.isEmpty }.count)
+            count = max(known.count, cleaned.filter { !$0.isEmpty }.count, expectedTracks, 1)
             songCountLocked = true
         } else if expectedTracks > 0 {
             count = expectedTracks
@@ -378,16 +640,25 @@ final class DownloadService: ObservableObject {
         convertLabel = ""
         convertSkipped = false
 
+        // Preserve finished-row status when rebuilding the same job (retry / title refresh).
+        let previousByIndex = songItems
         songItems = (0..<totalExpected).map { idx in
             let raw = idx < cleaned.count ? cleaned[idx] : ""
             let title: String
-            if !raw.isEmpty, !raw.hasPrefix("Song ") {
+            if !raw.isEmpty, !raw.hasPrefix("Song "), !raw.hasPrefix("Track ") {
                 title = raw
+            } else if previousByIndex.indices.contains(idx),
+                      !previousByIndex[idx].name.hasPrefix("Song "),
+                      !previousByIndex[idx].name.hasPrefix("Track "),
+                      !previousByIndex[idx].name.isEmpty {
+                title = previousByIndex[idx].name
             } else {
                 title = "Song \(idx + 1)"
             }
-            let tid = idx < ids.count ? ids[idx] : ""
-            return SongDownloadItem(
+            let tid = idx < ids.count && !ids[idx].isEmpty
+                ? ids[idx]
+                : (previousByIndex.indices.contains(idx) ? previousByIndex[idx].trackId : "")
+            var item = SongDownloadItem(
                 id: idx + 1,
                 number: idx + 1,
                 name: title,
@@ -395,8 +666,62 @@ final class DownloadService: ObservableObject {
                 fraction: 0,
                 trackId: tid
             )
+            if previousByIndex.indices.contains(idx) {
+                let prev = previousByIndex[idx]
+                if prev.isFinished {
+                    item.status = prev.status
+                    item.fraction = prev.fraction
+                    item.skipReason = prev.skipReason
+                }
+            }
+            return item
         }
+        markDuplicateTracksAsSkipped()
         markNextDownloading()
+    }
+
+    /// Later playlist entries that repeat an earlier Spotify track id → Skipped (duplicate).
+    /// Title-only matching is intentionally disabled — it falsely marked ~half the playlist
+    /// when track ids weren’t loaded yet (logs: uniqueIds=0, duplicates=109).
+    private func markDuplicateTracksAsSkipped() {
+        // Restore ids if Progress rows were rebuilt without them.
+        for i in songItems.indices where songItems[i].trackId.isEmpty && i < sessionTrackIds.count {
+            songItems[i].trackId = sessionTrackIds[i]
+        }
+        var seenIds = Set<String>()
+        var dupCount = 0
+        var skippedAlreadySaved = 0
+        let idCount = songItems.filter { !$0.trackId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
+        for i in songItems.indices {
+            if songItems[i].status == .skipped, songItems[i].skipReason == .cancelled {
+                continue
+            }
+            // Never reclassify a confirmed on-disk skip as a playlist duplicate.
+            if songItems[i].status == .skipped, songItems[i].skipReason == .alreadySaved {
+                skippedAlreadySaved += 1
+                let tid = songItems[i].trackId.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !tid.isEmpty { seenIds.insert(tid) }
+                continue
+            }
+            let tid = songItems[i].trackId.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !tid.isEmpty else { continue }
+            if seenIds.contains(tid) {
+                songItems[i].status = .skipped
+                songItems[i].skipReason = .duplicate
+                songItems[i].fraction = 1
+                dupCount += 1
+            } else {
+                seenIds.insert(tid)
+            }
+        }
+    }
+
+    private nonisolated static func normalizedSongKey(_ name: String) -> String {
+        let base = name.replacingOccurrences(of: "—", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+        return base.lowercased().filter { $0.isLetter || $0.isNumber || $0.isWhitespace }
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
     }
 
     @discardableResult
@@ -450,12 +775,16 @@ final class DownloadService: ObservableObject {
         cancelFlag.value = false
         skipPlaylistFlag.value = false
         skipSongFlag.value = false
-        // Clear hung leftover zotify CLIs before starting (they block Spotify metadata).
-        Self.killOrphanZotifyProcesses()
+        awaitingSpotifyLogin.value = false
+        reauthHandoff.value = false
+        pendingAuthURL = nil
+        activeStore = store
+        // Finish leftover kills *before* launching zotify (parallel kill was aborting new jobs).
+        await killOrphanZotifyProcessesAwaiting(source: "downloadStart")
         downloadHadError = false
         isRunning = true
-        statusMessage = "Fetching track info…"
-        downloadSpeedLabel = "Fetching track info…"
+        setPhase(.starting)
+        downloadSpeedLabel = "Starting…"
         downloadErrorMessage = ""
         retryStatusMessage = ""
         isConverting = false
@@ -468,11 +797,33 @@ final class DownloadService: ObservableObject {
         activeSongIndex = nil
         requestShowGetMusic = true
 
+        // Use the same OAuth UI as Preferences (success page + auto-close), not zotify’s raw callback.
+        if !Self.hasSpotifyCredentials() {
+            setPhase(.signingIn)
+            downloadSpeedLabel = "Waiting for Spotify login…"
+            showToast("Sign in with Spotify to download", duration: 8)
+            let signedIn = await signInWithSpotify(store: store, forceFreshLogin: true)
+            if !signedIn || cancelFlag.value {
+                isRunning = false
+                statusMessage = "Sign-in required"
+                downloadPhase = .idle
+                tabBadge = .failure
+                activeStore = nil
+                return false
+            }
+            store.syncToZotifyConfig()
+            // Give librespot a moment to settle before the download CLI reuses credentials.
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            setPhase(.starting)
+            downloadSpeedLabel = "Starting…"
+        }
+
         var items = buildQueueItems(urls: urls, queue: queue)
         for i in items.indices {
             items[i].status = .pending
             items[i].retryAttempt = 0
             items[i].lastError = ""
+            items[i].name = Self.sanitizePlaylistFolderName(items[i].name)
         }
         queueItems = items
         currentQueueIndex = 0
@@ -483,6 +834,8 @@ final class DownloadService: ObservableObject {
         var initialIds = trackIds
         var initialExpected = expectedTracks
         if let first = items.first, initialNames.isEmpty && initialIds.isEmpty && initialExpected == 0 {
+            setPhase(.fetchingTrackInfo)
+            downloadSpeedLabel = "Fetching track list…"
             let result = await LinkPreviewService.lookup(urlText: first.url, musicRoot: settings.rootPath)
             if let preview = result.preview {
                 if preview.trackCount > 0 { initialExpected = max(initialExpected, preview.trackCount) }
@@ -497,6 +850,8 @@ final class DownloadService: ObservableObject {
                     }
                 }
             }
+            setPhase(.starting)
+            downloadSpeedLabel = "Starting…"
         }
 
         // Show song rows immediately (placeholders OK). Prefetch real titles in background.
@@ -526,11 +881,11 @@ final class DownloadService: ObservableObject {
         let genre = settings.defaultGenre
         let autoPP = settings.autoPostprocess
         autoConvertEnabled = autoPP && format != "none" && format != "ogg"
-        if autoConvertEnabled, convertLabel.isEmpty {
-            convertLabel = "Converting to FLAC + lyrics…"
-        }
+        // Don't set convertLabel yet — Progress used to show “Converting…” before download began.
         let maxAttempts = 5
         let jobStartedAt = Date()
+        self.jobStartedAt = jobStartedAt
+        self.activeMusicRoot = root
 
         // Drain pending items so mid-run enqueue adds are processed.
         while !flag.value {
@@ -540,6 +895,7 @@ final class DownloadService: ObservableObject {
             skipPlaylistFlag.value = false
             skipSongFlag.value = false
             beginQueueItem(at: idx)
+            capturePreexistingDiskState(root: root, playlistName: item.name)
             appendLog("")
             let queueTotal = queueItems.count
             if queueTotal > 1 {
@@ -548,11 +904,24 @@ final class DownloadService: ObservableObject {
                 appendLog("Downloading \(item.name)…")
             }
 
-            // Do not block the download on metadata lookup here; run with whatever metadata
-            // we already have and let runtime output fill song rows progressively.
+            // Prefer titles already filled by prefetch / prepareJobUI.
             var names = (idx == 0 && !trackNames.isEmpty) ? trackNames : []
             var resolvedTrackIds: [String] = (idx == 0 && !trackIds.isEmpty) ? trackIds : []
             var expected = item.trackCount > 0 ? item.trackCount : (idx == 0 ? expectedTracks : 0)
+            if names.isEmpty || names.allSatisfy({ $0.hasPrefix("Song ") || $0.hasPrefix("Track ") || $0.isEmpty }) {
+                let current = songItems.map(\.name)
+                if current.contains(where: { !$0.hasPrefix("Song ") && !$0.hasPrefix("Track ") && !$0.isEmpty }) {
+                    names = current
+                }
+            }
+            if resolvedTrackIds.isEmpty || resolvedTrackIds.allSatisfy(\.isEmpty) {
+                let currentIds = songItems.map(\.trackId)
+                if currentIds.contains(where: { !$0.isEmpty }) {
+                    resolvedTrackIds = currentIds
+                } else if !sessionTrackIds.isEmpty {
+                    resolvedTrackIds = sessionTrackIds
+                }
+            }
 
             if skipPlaylistFlag.value || flag.value {
                 finishQueueItem(at: idx, succeeded: false, cancelled: true)
@@ -576,14 +945,25 @@ final class DownloadService: ObservableObject {
                     ? ""
                     : "Retry \(attempt) of \(maxAttempts)…"
                 if attempt > 1 {
+                    setPhase(.retrying)
+                    retryStatusMessage = "Retry \(attempt) of \(maxAttempts)…"
                     statusMessage = "Retrying \(item.name) (\(attempt)/\(maxAttempts))…"
                     appendLog("Retry \(attempt)/\(maxAttempts) for “\(item.name)”…")
+                } else {
+                    setPhase(.checkingExisting)
                 }
                 prepareProgress(
                     expectedTracks: max(expected, resolvedTrackIds.count, 1),
                     trackNames: names,
                     trackIds: resolvedTrackIds
                 )
+                Self.reconcilePlaylistSongArchive(
+                    root: root,
+                    playlistName: item.name,
+                    trackIds: resolvedTrackIds.isEmpty ? songItems.map(\.trackId) : resolvedTrackIds,
+                    trackNames: names.isEmpty ? songItems.map(\.name) : names
+                )
+                applyLiveDiskProgress(root: root, playlistName: item.name)
 
                 let attemptResult = await runPlaylistAttempt(
                     playlistURL: item.url,
@@ -599,12 +979,22 @@ final class DownloadService: ObservableObject {
 
                 if attemptResult.0 {
                     playlistOK = true
+                    reconcileWholePlaylistAfterZotify(root: root)
                     finishAllSongsForConvert()
+                    markDuplicateTracksAsSkipped()
+                    refreshTotalProgressFromSongs()
                     let shouldConvert = autoPP
                         && format != "none"
                         && format != "ogg"
                         && !flag.value
                         && !skipPlaylistFlag.value
+                    let newlyDownloaded = songItems.contains { $0.status == .done }
+                    let hasConvertibleOnDisk = Self.playlistHasConvertibleSource(
+                        root: root,
+                        playlistName: item.name
+                    )
+                    // Always attempt convert after a successful download when enabled —
+                    // gate used to skip when songs were “already saved” even if .ogg still needed FLAC.
                     if shouldConvert {
                         guard let post else {
                             appendLog("Post-process tool missing (zotify-postprocess) — left files as downloaded.")
@@ -684,10 +1074,21 @@ final class DownloadService: ObservableObject {
             }
 
             finishActiveSongIfNeeded()
-            for i in songItems.indices where songItems[i].status == .downloading {
-                songItems[i].status = .done
-                songItems[i].fraction = 1
-                totalCompleted = min(totalExpected, totalCompleted + 1)
+            let downloadingBeforePromote = songItems.filter { $0.status == .downloading }.count
+            let wasCancelled = cancelledPlaylist || skipPlaylistFlag.value || flag.value
+            if !wasCancelled {
+                for i in songItems.indices where songItems[i].status == .downloading {
+                    songItems[i].status = .done
+                    songItems[i].fraction = 1
+                    totalCompleted = min(totalExpected, totalCompleted + 1)
+                }
+            } else {
+                for i in songItems.indices where !songItems[i].isFinished {
+                    songItems[i].status = .skipped
+                    songItems[i].skipReason = .cancelled
+                    songItems[i].fraction = 1
+                }
+                totalCompleted = songItems.filter { $0.status == .done || $0.status == .skipped }.count
             }
 
             if cancelledPlaylist || skipPlaylistFlag.value {
@@ -715,6 +1116,7 @@ final class DownloadService: ObservableObject {
             }
             for i in songItems.indices where !songItems[i].isFinished {
                 songItems[i].status = .skipped
+                songItems[i].skipReason = .cancelled
                 songItems[i].fraction = 1
             }
             totalCompleted = songItems.filter { $0.status == .done || $0.status == .skipped }.count
@@ -742,23 +1144,47 @@ final class DownloadService: ObservableObject {
         let finishedTotal = max(queueItems.count, 1)
         ZotifyCLI.scrubLogFiles(arguments: ZotifyCLI.isolatedFlags(rootPath: root))
         isRunning = false
+        if downloadPhase != .idle {
+            // Keep terminal statusMessage ("Done" / errors); clear live phase.
+            if downloadPhase != .converting {
+                downloadPhase = .idle
+            }
+        }
+        activeStore = nil
         activeSongIndex = nil
         downloadSpeedLabel = ""
         retryStatusMessage = ""
-        // Final honesty pass: playlist folder file count vs expected songs.
+        awaitingSpotifyLogin.value = false
+        reauthHandoff.value = false
+        // Final honesty pass: song Progress status + files across app + legacy libraries.
         if let q = queueItems.first(where: { $0.status == .done || $0.status == .failed || $0.status == .downloading })
             ?? queueItems.first {
-            let folder = URL(fileURLWithPath: root).appendingPathComponent(q.name).path
-            let scan = FileManager.default.fileExists(atPath: folder) ? folder : root
-            let onDisk = Self.countAudioFiles(in: scan)
-            if onDisk < totalExpected || songItems.contains(where: { $0.status == .failed }) {
+            let statusDone = songItems.filter { $0.status == .done || $0.status == .skipped }.count
+            let failedSongs = songItems.filter { $0.status == .failed }.count
+            let scanPaths = Self.playlistScanPaths(root: root, playlistName: q.name)
+            var uniqueNames = Set<String>()
+            for path in scanPaths {
+                for url in Self.audioFileURLs(in: path) {
+                    uniqueNames.insert(url.deletingPathExtension().lastPathComponent.lowercased())
+                }
+            }
+            let onDiskUnique = uniqueNames.count
+            if failedSongs == 0, statusDone >= totalExpected, totalExpected > 0 {
+                // Every playlist row is accounted for (Done / Already saved / Duplicate).
+                downloadHadError = false
+                downloadErrorMessage = ""
+                totalCompleted = totalExpected
+            } else if onDiskUnique < totalExpected || failedSongs > 0 {
                 downloadHadError = true
-                if downloadErrorMessage.isEmpty {
-                    downloadErrorMessage = "Saved \(onDisk) of \(totalExpected) songs on disk."
+                if downloadErrorMessage.isEmpty || downloadErrorMessage.contains("Saved ") {
+                    downloadErrorMessage = "Saved \(min(onDiskUnique, totalExpected)) of \(totalExpected) songs on disk"
+                        + (failedSongs > 0 ? " — \(failedSongs) couldn’t be downloaded from Spotify." : ".")
                 }
             }
         }
-        if flag.value {
+        let anyQueueCancelled = queueItems.contains(where: { $0.status == .cancelled })
+        let playlistSkipCancel = skipPlaylistFlag.value
+        if flag.value || (anyQueueCancelled && !queueItems.contains(where: { $0.status == .done || $0.status == .failed || $0.status == .downloading || $0.status == .pending })) {
             convertSkipped = true
             if convertLabel.isEmpty || convertLabel == "Convert cancelled" {
                 convertLabel = "Convert skipped"
@@ -767,13 +1193,17 @@ final class DownloadService: ObservableObject {
                 convertFraction = max(convertFraction, 1)
             }
             statusMessage = "Stopped"
+            downloadPhase = .idle
             appendLog("Cancelled.")
             tabBadge = .none
+            showCelebration = false
         } else if downloadHadError || queueItems.contains(where: { $0.status == .failed })
             || songItems.contains(where: { $0.status == .failed }) {
             statusMessage = "Finished with errors"
+            downloadPhase = .idle
             appendLog("Finished \(finishedTotal) playlist(s) with some errors.")
             tabBadge = .failure
+            showCelebration = false
             if downloadErrorMessage.isEmpty,
                let failed = queueItems.first(where: { $0.status == .failed }) {
                 downloadErrorMessage = failed.lastError.isEmpty
@@ -789,11 +1219,19 @@ final class DownloadService: ObservableObject {
             if !downloadErrorMessage.isEmpty {
                 showToast(downloadErrorMessage, duration: 6)
             }
+        } else if anyQueueCancelled {
+            // Mixed queue: some cancelled, rest ok — never celebrate a cancel.
+            statusMessage = "Stopped"
+            downloadPhase = .idle
+            tabBadge = .none
+            showCelebration = false
+            appendLog("Finished with cancelled playlist(s).")
         } else {
             let allSongsSucceeded = songItems.isEmpty
                 || songItems.allSatisfy { $0.status == .done || $0.status == .skipped }
             if allSongsSucceeded {
                 statusMessage = "Done"
+                downloadPhase = .idle
                 appendLog("Finished \(finishedTotal) playlist(s).")
                 totalCompleted = songItems.filter { $0.status == .done || $0.status == .skipped }.count
                 tabBadge = .success
@@ -802,6 +1240,7 @@ final class DownloadService: ObservableObject {
             } else {
                 downloadHadError = true
                 statusMessage = "Finished with errors"
+                downloadPhase = .idle
                 appendLog("Finished with incomplete songs.")
                 tabBadge = .failure
                 if downloadErrorMessage.isEmpty {
@@ -967,121 +1406,259 @@ final class DownloadService: ObservableObject {
         return lower.contains("/playlist/") || lower.contains("spotify:playlist:")
     }
 
-    /// Download one playlist attempt — whole playlist URL keeps tracks in one folder.
+    /// Download one playlist attempt.
+    /// Prefer a single whole-playlist zotify run (one Python/Spotify cold start).
+    /// Track-by-track is only used to finish leftovers after a mid-run song skip.
     private func runPlaylistAttempt(
         playlistURL: String,
         zotify: URL,
         root: String,
         flag: CancellationFlag
     ) async -> (Bool, String) {
-        let tracks = songItems
-        let hasTrackIds = tracks.contains(where: { !$0.trackId.isEmpty })
-        let useWholePlaylist = Self.isSpotifyPlaylistURL(playlistURL)
+        let playlistName = queueItems.indices.contains(currentQueueIndex)
+            ? queueItems[currentQueueIndex].name
+            : ""
 
-        // Track-by-track scatters files under Artist/Album (OUTPUT_SINGLE). Use whole
-        // playlist URL so zotify writes everything into {playlist}/.
-        if hasTrackIds, !useWholePlaylist {
-            var anyFailed = false
-            var lastError = ""
-            for song in tracks {
-                if flag.value || skipPlaylistFlag.value { break }
-                guard let idx = songItems.firstIndex(where: { $0.id == song.id }) else { continue }
-                if songItems[idx].isFinished { continue }
-
-                skipSongFlag.value = false
-                activeSongIndex = idx
-                songItems[idx].status = .downloading
-                songItems[idx].fraction = 0.02
-                statusMessage = "Downloading \(songItems[idx].name)…"
-
-                let trackURL = "https://open.spotify.com/track/\(songItems[idx].trackId)"
-                let result = await runZotifyOnce(
-                    zotify: zotify,
-                    url: trackURL,
-                    root: root,
-                    flag: flag
-                )
-
-                if skipPlaylistFlag.value || flag.value {
-                    break
-                }
-                if skipSongFlag.value {
-                    // User cancelled this song — already marked skipped.
-                    if songItems[idx].status != .skipped {
-                        songItems[idx].status = .skipped
-                        songItems[idx].fraction = 1
-                    }
-                    activeSongIndex = nil
-                    continue
-                }
-                if result.0 {
-                    songItems[idx].status = .done
-                    songItems[idx].fraction = 1
-                    totalCompleted = min(totalExpected, totalCompleted + 1)
-                    activeSongIndex = nil
-                } else {
-                    anyFailed = true
-                    lastError = result.1
-                    songItems[idx].status = .failed
-                    songItems[idx].fraction = 1
-                    activeSongIndex = nil
-                }
-            }
-            if skipPlaylistFlag.value {
-                return (false, "Cancelled")
-            }
-            if flag.value {
-                return (false, "Stopped")
-            }
-            // Success if nothing hard-failed (skipped songs are OK).
-            let hardFail = songItems.contains(where: { $0.status == .failed })
-            return (!hardFail && !anyFailed, lastError)
+        let pendingWithIds = songItems.filter { !$0.isFinished && !$0.trackId.isEmpty }
+        let someAlreadyFinished = songItems.contains(where: \.isFinished)
+        // Resume leftovers track-by-track so skip-song / partial retries stay precise.
+        if someAlreadyFinished, !pendingWithIds.isEmpty {
+            return await runTrackByTrackAttempt(
+                tracks: pendingWithIds,
+                playlistName: playlistName,
+                zotify: zotify,
+                root: root,
+                flag: flag
+            )
         }
 
-        // Fallback: whole playlist URL (per-song cancel kills and marks current skipped; remaining stay pending).
+
+        // Always download into a playlist subfolder (convert + library expect folders, not flat root .ogg).
+        let cleanPlaylist = Self.sanitizePlaylistFolderName(playlistName)
+        let downloadRoot: String = {
+            guard !cleanPlaylist.isEmpty else { return root }
+            let folder = URL(fileURLWithPath: root).appendingPathComponent(cleanPlaylist)
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            return folder.path
+        }()
+
+        if let idx = songItems.firstIndex(where: { !$0.isFinished }) {
+            activeSongIndex = idx
+            songItems[idx].status = .downloading
+            songItems[idx].fraction = max(songItems[idx].fraction, 0.02)
+        }
+        // Start in "checking" — switch to downloading when bytes/speed appear.
+        setPhase(.checkingExisting)
+        if downloadSpeedLabel.isEmpty || downloadSpeedLabel.contains("Fetching") || downloadSpeedLabel == "Starting…" {
+            let finished = songItems.filter(\.isFinished).count
+            let expected = max(totalExpected, songItems.count, 1)
+            downloadSpeedLabel = finished > 0
+                ? "\(finished) of \(expected) on disk"
+                : "Looking for existing songs…"
+        }
+
         let result = await runZotifyOnce(
             zotify: zotify,
             url: playlistURL,
-            root: root,
-            flag: flag
+            root: downloadRoot,
+            flag: flag,
+            progressFolderName: ""
         )
+        // Soft retry after LOGIN FAILED (61) without wiping credentials.
+        var effective = result
+        if !result.0,
+           !flag.value,
+           !skipPlaylistFlag.value,
+           !reauthHandoff.value,
+           Self.hasSpotifyCredentials(),
+           (result.1.localizedCaseInsensitiveContains("login failed")
+            || lastZotifyOutput.localizedCaseInsensitiveContains("login failed")) {
+            activeStore?.syncToZotifyConfig()
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            statusMessage = playlistName.isEmpty ? "Retrying…" : "Retrying \(playlistName)…"
+            setPhase(.retrying)
+            effective = await runZotifyOnce(
+                zotify: zotify,
+                url: playlistURL,
+                root: downloadRoot,
+                flag: flag,
+                progressFolderName: ""
+            )
+        }
+        if reauthHandoff.value, !flag.value, !skipPlaylistFlag.value {
+            reauthHandoff.value = false
+            awaitingSpotifyLogin.value = false
+            killOrphanZotifyProcessesAsync(source: "reauthHandoff")
+            if let store = activeStore {
+                setPhase(.signingIn)
+                downloadSpeedLabel = "Waiting for Spotify login…"
+                showToast("Complete Spotify sign-in in your browser", duration: 10)
+                await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                    DispatchQueue.global(qos: .utility).async {
+                        Self.freeOAuthPort(4381)
+                        cont.resume()
+                    }
+                }
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                // Keep existing credentials unless missing — forceFresh was deleting good sessions.
+                let signedIn = await signInWithSpotify(
+                    store: store,
+                    forceFreshLogin: !Self.hasSpotifyCredentials()
+                )
+                if signedIn, !flag.value {
+                    store.syncToZotifyConfig()
+                    try? await Task.sleep(nanoseconds: 1_200_000_000)
+                    setPhase(.checkingExisting)
+                    downloadSpeedLabel = "Looking for existing songs…"
+                    let retry = await runZotifyOnce(
+                        zotify: zotify,
+                        url: playlistURL,
+                        root: downloadRoot,
+                        flag: flag,
+                        progressFolderName: ""
+                    )
+                    reconcileWholePlaylistAfterZotify(root: root)
+                    if skipPlaylistFlag.value { return (false, "Cancelled") }
+                    if flag.value { return (false, "Stopped") }
+                    let hardFail = songItems.contains(where: { $0.status == .failed })
+                    if hardFail, Self.countAudioFiles(in: root) == 0 {
+                        let reason = Self.extractFailureReason(from: lastZotifyOutput) ?? retry.1
+                        return (false, reason.isEmpty
+                            ? "Spotify couldn’t provide audio for these tracks. Try again in a minute."
+                            : reason)
+                    }
+                    return retry.0 ? (true, "") : retry
+                }
+                return (false, "Sign-in required")
+            }
+            return (false, "Sign-in required")
+        }
         reconcileWholePlaylistAfterZotify(root: root)
         if skipPlaylistFlag.value {
             return (false, "Cancelled")
         }
         if skipSongFlag.value {
-            // Mark active as skipped; treat as incomplete so retry can continue with skip-existing.
             if let idx = activeSongIndex, songItems.indices.contains(idx), !songItems[idx].isFinished {
                 songItems[idx].status = .skipped
+                songItems[idx].skipReason = .cancelled
                 songItems[idx].fraction = 1
             }
             activeSongIndex = nil
-            // Re-run handled by outer retry — but return failure so retry kicks in.
+            skipSongFlag.value = false
+            // Finish remaining songs without re-downloading the whole playlist.
+            let leftover = songItems.filter { !$0.isFinished && !$0.trackId.isEmpty }
+            if !leftover.isEmpty, !flag.value, !skipPlaylistFlag.value {
+                return await runTrackByTrackAttempt(
+                    tracks: leftover,
+                    playlistName: playlistName,
+                    zotify: zotify,
+                    root: root,
+                    flag: flag
+                )
+            }
             return (false, "Song skipped — continuing")
         }
         let hardFail = songItems.contains(where: { $0.status == .failed })
         let audioSaved = Self.countAudioFiles(in: root)
         if hardFail, audioSaved == 0 {
             let reason = Self.extractFailureReason(from: lastZotifyOutput)
-                ?? result.1
-                ?? "Spotify couldn’t provide audio for these tracks. Try again in a minute."
-            return (false, reason)
+                ?? effective.1
+            return (false, reason.isEmpty
+                ? "Spotify couldn’t provide audio for these tracks. Try again in a minute."
+                : reason)
         }
-        if !result.0 {
-            return result
+        if !effective.0 {
+            return effective
         }
         return (true, "")
+    }
+
+    /// One zotify process per remaining track (slower start — used after song skip / partial resume).
+    private func runTrackByTrackAttempt(
+        tracks: [SongDownloadItem],
+        playlistName: String,
+        zotify: URL,
+        root: String,
+        flag: CancellationFlag
+    ) async -> (Bool, String) {
+        let cleanPlaylist = Self.sanitizePlaylistFolderName(playlistName)
+        let trackRoot: String = {
+            if cleanPlaylist.isEmpty { return root }
+            let folder = URL(fileURLWithPath: root).appendingPathComponent(cleanPlaylist)
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            return folder.path
+        }()
+        var anyFailed = false
+        var lastError = ""
+        for song in tracks {
+            if flag.value || skipPlaylistFlag.value { break }
+            guard let idx = songItems.firstIndex(where: { $0.id == song.id }) else { continue }
+            if songItems[idx].isFinished { continue }
+
+            skipSongFlag.value = false
+            activeSongIndex = idx
+            songItems[idx].status = .downloading
+            songItems[idx].fraction = 0.02
+            setPhase(.checkingExisting)
+            downloadSpeedLabel = "Looking for existing songs…"
+
+            let trackURL = "https://open.spotify.com/track/\(songItems[idx].trackId)"
+            let result = await runZotifyOnce(
+                zotify: zotify,
+                url: trackURL,
+                root: trackRoot,
+                flag: flag,
+                progressFolderName: ""
+            )
+
+            if skipPlaylistFlag.value || flag.value {
+                break
+            }
+            if skipSongFlag.value {
+                if songItems[idx].status != .skipped {
+                    songItems[idx].status = .skipped
+                    songItems[idx].skipReason = .cancelled
+                    songItems[idx].fraction = 1
+                }
+                activeSongIndex = nil
+                continue
+            }
+            if result.0 {
+                songItems[idx].status = .done
+                songItems[idx].fraction = 1
+                totalCompleted = min(totalExpected, totalCompleted + 1)
+                activeSongIndex = nil
+            } else {
+                anyFailed = true
+                lastError = result.1
+                songItems[idx].status = .failed
+                songItems[idx].fraction = 1
+                activeSongIndex = nil
+            }
+        }
+        if skipPlaylistFlag.value {
+            return (false, "Cancelled")
+        }
+        if flag.value {
+            return (false, "Stopped")
+        }
+        let hardFail = songItems.contains(where: { $0.status == .failed })
+        return (!hardFail && !anyFailed, lastError)
     }
 
     private func runZotifyOnce(
         zotify: URL,
         url: String,
         root: String,
-        flag: CancellationFlag
+        flag: CancellationFlag,
+        /// `nil` → use current queue playlist name; `""` → scan `root` itself (track-by-track folder).
+        progressFolderName: String? = nil
     ) async -> (Bool, String) {
-        let playlistName = queueItems.indices.contains(currentQueueIndex)
-            ? queueItems[currentQueueIndex].name
-            : ""
+        let playlistName = progressFolderName ?? (
+            queueItems.indices.contains(currentQueueIndex)
+                ? queueItems[currentQueueIndex].name
+                : ""
+        )
         // Show already-saved tracks immediately so skip-existing runs don’t look frozen at Song 1.
         applyLiveDiskProgress(root: root, playlistName: playlistName)
 
@@ -1118,9 +1695,12 @@ final class DownloadService: ObservableObject {
                         },
                         isCancelled: {
                             flag.value || self.skipPlaylistFlag.value || self.skipSongFlag.value
+                                || self.reauthHandoff.value
                         },
                         stallTimeout: 75,
                         stallHeartbeat: {
+                            // Don't kill while handing off to polished OAuth.
+                            if self.awaitingSpotifyLogin.value || self.reauthHandoff.value { return true }
                             if fileCountBox.bumped {
                                 fileCountBox.bumped = false
                                 return true
@@ -1191,10 +1771,18 @@ final class DownloadService: ObservableObject {
         if !trackIds.isEmpty {
             sessionTrackIds = trackIds
         }
+        markDuplicateTracksAsSkipped()
+        // Keep first pending row as downloading after dup marks.
+        if activeSongIndex == nil || (activeSongIndex.map { songItems.indices.contains($0) && songItems[$0].isFinished } ?? false) {
+            markNextDownloading()
+        }
     }
 
     func prefetchTrackTitlesInBackground(url: String, musicRoot: String) {
+        guard !url.isEmpty, !titlePrefetchInFlight else { return }
+        titlePrefetchInFlight = true
         Task { @MainActor in
+            defer { titlePrefetchInFlight = false }
             let result = await LinkPreviewService.lookup(urlText: url, musicRoot: musicRoot)
             guard let preview = result.preview else { return }
             applyTrackTitles(preview.trackNames, trackIds: preview.trackIds)
@@ -1205,20 +1793,121 @@ final class DownloadService: ObservableObject {
         }
     }
 
+    /// App download folder + legacy `Zotify Music` (read-only) for the same playlist name.
+    private nonisolated static func playlistScanPaths(root: String, playlistName: String) -> [String] {
+        var paths: [String] = []
+        let cleanName = sanitizePlaylistFolderName(playlistName)
+        let primary = cleanName.isEmpty
+            ? root
+            : URL(fileURLWithPath: root).appendingPathComponent(cleanName).path
+        if FileManager.default.fileExists(atPath: primary) {
+            paths.append(primary)
+        }
+        // Never fall back to scanning the entire music library — that falsely marks
+        // unrelated songs (e.g. Dj HipHop) as “already saved” for a new playlist.
+        // Also never treat an empty playlistName as “scan all of Zotify Music”.
+        if !cleanName.isEmpty {
+            let legacyRoot = AppPaths.terminalZotifyMusicRoot.path
+            if URL(fileURLWithPath: root).standardizedFileURL.path
+                != URL(fileURLWithPath: legacyRoot).standardizedFileURL.path {
+                let legacy = URL(fileURLWithPath: legacyRoot).appendingPathComponent(cleanName).path
+                if FileManager.default.fileExists(atPath: legacy), !paths.contains(legacy) {
+                    paths.append(legacy)
+                }
+            }
+        }
+        return paths
+    }
+
+    /// Strip quotes / path junk so folder names stay valid (embed HTML used to leave a trailing `"`).
+    nonisolated static func sanitizePlaylistFolderName(_ raw: String) -> String {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        s = s.trimmingCharacters(in: CharacterSet(charactersIn: "\"'“”‘’"))
+        let illegal = CharacterSet(charactersIn: "/:\\*?<>|")
+        s = s.components(separatedBy: illegal).joined(separator: "-")
+        while s.contains("  ") { s = s.replacingOccurrences(of: "  ", with: " ") }
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// True when playlist folder (or flat music root) still has unconverted source audio (.ogg, etc.).
+    nonisolated static func playlistHasConvertibleSource(root: String, playlistName: String) -> Bool {
+        let sourceExts: Set<String> = ["ogg", "mp3", "m4a", "aac", "opus", "wav"]
+        let rootURL = URL(fileURLWithPath: root)
+        var folders = [rootURL]
+        let clean = sanitizePlaylistFolderName(playlistName)
+        if !clean.isEmpty {
+            folders.insert(rootURL.appendingPathComponent(clean, isDirectory: true), at: 0)
+        }
+        for folder in folders {
+            let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+            if names.contains(where: { sourceExts.contains(($0 as NSString).pathExtension.lowercased()) }) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Resolve the real Python postprocess script (bash wrappers cannot be passed to python3).
+    nonisolated static func postprocessPythonScript(from post: URL) -> URL? {
+        if post.pathExtension.lowercased() == "py",
+           FileManager.default.fileExists(atPath: post.path) {
+            return post
+        }
+        let sibling = post.appendingPathExtension("py")
+        if FileManager.default.fileExists(atPath: sibling.path) {
+            return sibling
+        }
+        let named = post.deletingLastPathComponent().appendingPathComponent("zotify-postprocess.py")
+        if FileManager.default.fileExists(atPath: named.path) {
+            return named
+        }
+        return nil
+    }
+
+    /// Snapshot both libraries before zotify starts, so a re-downloaded copy still
+    /// shows as Already saved instead of Done.
+    private func capturePreexistingDiskState(root: String, playlistName: String) {
+        let scanPaths = Self.playlistScanPaths(root: root, playlistName: playlistName)
+        var titleKeys = Set<String>()
+        var trackIds = Set<String>()
+        for path in scanPaths {
+            for row in Self.readSongIdRows(in: path) {
+                if !row.id.isEmpty { trackIds.insert(row.id) }
+                let titleKey = Self.normalizedSongKey(row.title)
+                if !titleKey.isEmpty { titleKeys.insert(titleKey) }
+                let displayTitleKey = Self.normalizedSongKey(row.displayName)
+                if !displayTitleKey.isEmpty { titleKeys.insert(displayTitleKey) }
+            }
+            for file in Self.audioFileURLs(in: path) {
+                let title = Self.titleFromAudioFilename(file.lastPathComponent)
+                let key = Self.normalizedSongKey(title)
+                if !key.isEmpty { titleKeys.insert(key) }
+            }
+        }
+        preexistingAudioTitleKeys = titleKeys
+        preexistingTrackIds = trackIds
+    }
+
     /// Update Progress rows from files already saved (so large playlists don’t look stuck at 2%).
     private func applyLiveDiskProgress(root: String, playlistName: String) {
-        let folderURL: URL
-        if !playlistName.isEmpty {
-            folderURL = URL(fileURLWithPath: root).appendingPathComponent(playlistName)
-        } else {
-            folderURL = URL(fileURLWithPath: root)
+        let scanPaths = Self.playlistScanPaths(root: root, playlistName: playlistName)
+        guard !scanPaths.isEmpty, !songItems.isEmpty else { return }
+
+        var rows: [SongIdRow] = []
+        var seenRowIds = Set<String>()
+        var files: [URL] = []
+        var seenFilePaths = Set<String>()
+        for path in scanPaths {
+            for row in Self.readSongIdRows(in: path) {
+                let key = row.id.isEmpty ? row.path : row.id
+                if seenRowIds.insert(key).inserted { rows.append(row) }
+            }
+            for file in Self.audioFileURLs(in: path) {
+                if seenFilePaths.insert(file.path).inserted { files.append(file) }
+            }
         }
-        let folder = folderURL.path
-        let scanPath = FileManager.default.fileExists(atPath: folder) ? folder : root
-        let rows = Self.readSongIdRows(in: scanPath)
-        let files = Self.audioFileURLs(in: scanPath)
         let count = max(files.count, rows.count)
-        guard count > 0, !songItems.isEmpty else { return }
+        guard count > 0 else { return }
 
         for i in songItems.indices where songItems[i].trackId.isEmpty && i < sessionTrackIds.count {
             songItems[i].trackId = sessionTrackIds[i]
@@ -1226,6 +1915,7 @@ final class DownloadService: ObservableObject {
         let byId = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         if !byId.isEmpty, songItems.contains(where: { !$0.trackId.isEmpty }) {
             for i in songItems.indices {
+                if songItems[i].isDuplicateSkip { continue }
                 guard let row = byId[songItems[i].trackId] else { continue }
                 let placeholder = songItems[i].name.hasPrefix("Song ")
                     || songItems[i].name.hasPrefix("Track ")
@@ -1233,45 +1923,27 @@ final class DownloadService: ObservableObject {
                 if placeholder || songItems[i].name != row.displayName {
                     songItems[i].name = row.displayName
                 }
-                if songItems[i].status != .done && songItems[i].status != .skipped {
-                    songItems[i].status = .done
-                    songItems[i].fraction = 1
+                if let path = Self.resolveAudioPath(for: row, files: files) {
+                    markSongPresentOnDisk(at: i, filePath: path)
                 }
             }
         } else if !rows.isEmpty {
-            // No track ids yet — map saved .song_ids rows positionally so names appear during skip-existing.
+            // No track ids yet — update names only. Do NOT mark status by song_ids order
+            // (download order ≠ playlist order and caused false Done/Failed).
             for (i, row) in rows.enumerated() where i < songItems.count {
+                if songItems[i].isDuplicateSkip { continue }
                 let placeholder = songItems[i].name.hasPrefix("Song ")
                     || songItems[i].name.hasPrefix("Track ")
                     || songItems[i].name.isEmpty
                 if placeholder {
                     songItems[i].name = row.displayName
                 }
-                if songItems[i].status != .done && songItems[i].status != .skipped {
-                    songItems[i].status = .done
-                    songItems[i].fraction = 1
-                }
-            }
-        } else {
-            // Prefer playlist-order filenames like "03_Artist_Title.ogg"
-            let sorted = files.sorted { a, b in
-                Self.playlistIndex(from: a.lastPathComponent) < Self.playlistIndex(from: b.lastPathComponent)
-            }
-            for (i, file) in sorted.enumerated() where i < songItems.count {
-                let title = Self.titleFromAudioFilename(file.lastPathComponent)
-                let placeholder = songItems[i].name.hasPrefix("Song ")
-                    || songItems[i].name.hasPrefix("Track ")
-                    || songItems[i].name.isEmpty
-                if !title.isEmpty, placeholder {
-                    songItems[i].name = title
-                }
-                if songItems[i].status != .done && songItems[i].status != .skipped {
-                    songItems[i].status = .done
-                    songItems[i].fraction = 1
-                }
             }
         }
-        let doneTarget = min(count, songItems.count)
+        // Match leftover audio (app folder + legacy Zotify Music) by title.
+        matchUnmatchedSongsToAudioFiles(files: files, knownRows: rows)
+        let finishedCount = songItems.filter { $0.status == .done || $0.status == .skipped }.count
+        let doneTarget = min(max(finishedCount, 0), songItems.count)
         if doneTarget < songItems.count,
            songItems[doneTarget].status == .pending || songItems[doneTarget].status == .downloading {
             songItems[doneTarget].status = .downloading
@@ -1279,13 +1951,182 @@ final class DownloadService: ObservableObject {
             activeSongIndex = doneTarget
         }
         totalCompleted = songItems.filter { $0.status == .done || $0.status == .skipped }.count
-        if downloadSpeedLabel.isEmpty || downloadSpeedLabel.contains("Fetching") || downloadSpeedLabel.contains("of") {
-            downloadSpeedLabel = "\(totalCompleted) of \(max(totalExpected, songItems.count)) saved"
+        refreshTotalProgressFromSongs()
+        // Don't overwrite a live MB/s reading with the saved-count summary.
+        let looksLikeSpeed = downloadSpeedLabel.contains("/s") || downloadSpeedLabel.contains("B/s")
+        let skipped = songItems.filter { $0.status == .skipped && $0.skipReason == .alreadySaved }.count
+        let expected = max(totalExpected, songItems.count, 1)
+        if !looksLikeSpeed {
+            if downloadPhase == .checkingExisting || downloadPhase == .starting {
+                downloadSpeedLabel = skipped > 0 || totalCompleted > 0
+                    ? "\(totalCompleted) of \(expected) on disk"
+                    : "Looking for existing songs…"
+            } else if downloadSpeedLabel.isEmpty
+                || downloadSpeedLabel.contains("Fetching")
+                || downloadSpeedLabel.contains(" of ")
+                || downloadSpeedLabel.contains("Looking for")
+                || downloadSpeedLabel.contains("on disk") {
+                downloadSpeedLabel = "\(totalCompleted) of \(expected) saved"
+            }
         }
-        if statusMessage.contains("Fetching") || statusMessage.isEmpty {
-            statusMessage = "Downloading…"
+        if downloadPhase == .starting || downloadPhase == .fetchingTrackInfo || statusMessage.isEmpty {
+            setPhase(.checkingExisting)
         }
     }
+
+    /// Files older than this job → Already saved; new/changed files → Done.
+    private func markSongPresentOnDisk(at index: Int, filePath: String) {
+        guard songItems.indices.contains(index) else { return }
+        guard !filePath.isEmpty, FileManager.default.fileExists(atPath: filePath) else { return }
+        let url = URL(fileURLWithPath: filePath)
+        let mod = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
+            ?? .distantPast
+        let titleKey = Self.normalizedSongKey(Self.titleFromAudioFilename(url.lastPathComponent))
+        let rowKeys = Self.candidateTitleKeys(for: songItems[index].name)
+        let titleExistedBefore = (!titleKey.isEmpty && preexistingAudioTitleKeys.contains(titleKey))
+            || rowKeys.contains(where: { preexistingAudioTitleKeys.contains($0) })
+        let trackExistedBefore = !songItems[index].trackId.isEmpty
+            && preexistingTrackIds.contains(songItems[index].trackId)
+        let existedBeforeJob = mod < jobStartedAt.addingTimeInterval(-1)
+            || titleExistedBefore
+            || trackExistedBefore
+        if songItems[index].status == .skipped { return }
+        if songItems[index].status == .done, !existedBeforeJob { return }
+        songItems[index].fraction = 1
+        if existedBeforeJob {
+            songItems[index].status = .skipped
+            songItems[index].skipReason = .alreadySaved
+        } else {
+            songItems[index].status = .done
+            songItems[index].skipReason = .none
+        }
+    }
+
+    /// Match playlist rows that aren’t finished yet to audio files / archive rows by title.
+    @discardableResult
+    private func matchUnmatchedSongsToAudioFiles(files: [URL], knownRows: [SongIdRow]) -> Int {
+        guard !files.isEmpty || !knownRows.isEmpty else { return 0 }
+
+        var byTitle: [String: String] = [:]
+        func rememberTitle(_ title: String, path: String) {
+            let key = Self.normalizedSongKey(title)
+            guard !key.isEmpty, !path.isEmpty else { return }
+            guard FileManager.default.fileExists(atPath: path) else { return }
+            if let existing = byTitle[key] {
+                if path.lowercased().hasSuffix(".flac"), !existing.lowercased().hasSuffix(".flac") {
+                    byTitle[key] = path
+                }
+            } else {
+                byTitle[key] = path
+            }
+        }
+
+        // Include archive paths too — previously these were excluded as "used", so
+        // title matching could never mark "Central Cee — Doja" against Doja.flac.
+        for row in knownRows {
+            let path = row.path
+            if !path.isEmpty, FileManager.default.fileExists(atPath: path) {
+                rememberTitle(row.title, path: path)
+                rememberTitle(row.displayName, path: path)
+            }
+        }
+        for file in files {
+            rememberTitle(Self.titleFromAudioFilename(file.lastPathComponent), path: file.path)
+        }
+        guard !byTitle.isEmpty else { return 0 }
+
+        var usedPaths = Set<String>()
+        var matched = 0
+        for i in songItems.indices {
+            if songItems[i].isDuplicateSkip { continue }
+            if songItems[i].status == .done || songItems[i].status == .skipped { continue }
+            let keys = Self.candidateTitleKeys(for: songItems[i].name)
+            var hit: String?
+            for key in keys {
+                if let path = byTitle[key], !usedPaths.contains(path) {
+                    hit = path
+                    break
+                }
+            }
+            // Fuzzy: title key contained in filename key or vice versa (feat. / remix variants).
+            if hit == nil {
+                for key in keys where key.count >= 6 {
+                    if let pair = byTitle.first(where: {
+                        !usedPaths.contains($0.value) && ($0.key.contains(key) || key.contains($0.key))
+                    }) {
+                        hit = pair.value
+                        break
+                    }
+                }
+            }
+            guard let path = hit else { continue }
+            markSongPresentOnDisk(at: i, filePath: path)
+            if songItems[i].status == .done || songItems[i].status == .skipped {
+                matched += 1
+                usedPaths.insert(path)
+            }
+        }
+        return matched
+    }
+
+    /// Convenience overload used by sync — scans given folder(s).
+    @discardableResult
+    private func matchUnmatchedSongsToAudioFiles(scanPath: String, knownRows: [SongIdRow]) -> Int {
+        matchUnmatchedSongsToAudioFiles(files: Self.audioFileURLs(in: scanPath), knownRows: knownRows)
+    }
+
+    /// If this row already has audio on disk (app or legacy library), mark Already saved / Done.
+    @discardableResult
+    private func recoverSongFromDiskIfPresent(at index: Int) -> Bool {
+        guard songItems.indices.contains(index) else { return false }
+        let playlistName = queueItems.indices.contains(currentQueueIndex)
+            ? queueItems[currentQueueIndex].name
+            : ""
+        let root = activeMusicRoot.isEmpty ? AppPaths.defaultMusicRoot.path : activeMusicRoot
+        let scanPaths = Self.playlistScanPaths(root: root, playlistName: playlistName)
+        var rows: [SongIdRow] = []
+        var files: [URL] = []
+        var seen = Set<String>()
+        for path in scanPaths {
+            for row in Self.readSongIdRows(in: path) {
+                if seen.insert(row.id.isEmpty ? row.path : row.id).inserted { rows.append(row) }
+            }
+            files.append(contentsOf: Self.audioFileURLs(in: path))
+        }
+        let tid = songItems[index].trackId
+        if !tid.isEmpty, let row = rows.first(where: { $0.id == tid }) {
+            if songItems[index].status == .failed || songItems[index].status == .downloading {
+                songItems[index].status = .pending
+            }
+            if let path = Self.resolveAudioPath(for: row, files: files) {
+                markSongPresentOnDisk(at: index, filePath: path)
+            }
+            return songItems[index].status == .done || songItems[index].status == .skipped
+        }
+        if songItems[index].status == .failed || songItems[index].status == .downloading {
+            songItems[index].status = .pending
+        }
+        _ = matchUnmatchedSongsToAudioFiles(files: files, knownRows: rows)
+        return songItems[index].status == .done || songItems[index].status == .skipped
+    }
+
+    private nonisolated static func candidateTitleKeys(for name: String) -> [String] {
+        var keys: [String] = []
+        let full = normalizedSongKey(name)
+        if !full.isEmpty { keys.append(full) }
+        // "Artist — Title" / "Artist - Title" → also try title-only (matches "Title.flac")
+        let seps = ["—", " – ", " - "]
+        for sep in seps {
+            if let r = name.range(of: sep) {
+                let title = String(name[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let t = normalizedSongKey(title)
+                if !t.isEmpty, !keys.contains(t) { keys.append(t) }
+                break
+            }
+        }
+        return keys
+    }
+
 
     private nonisolated static func audioFileURLs(in root: String) -> [URL] {
         let rootURL = URL(fileURLWithPath: root)
@@ -1335,10 +2176,8 @@ final class DownloadService: ObservableObject {
             }
         }
         refreshQueueLabels()
-        if queueItems.count > 1, queueItems.indices.contains(index) {
-            statusMessage = "Downloading \(queueItems[index].name)…"
-        } else {
-            statusMessage = "Downloading…"
+        if downloadPhase != .converting && downloadPhase != .signingIn && downloadPhase != .stopping {
+            setPhase(downloadPhase == .downloading ? .downloading : .checkingExisting)
         }
     }
 
@@ -1378,14 +2217,50 @@ final class DownloadService: ObservableObject {
     private func handleDownloadLine(_ line: String) {
         appendLog(line)
 
+        // Mid-download Spotify OAuth — hand off to the same flow as Preferences (nice success page).
+        // Do NOT open zotify’s raw authorize URL (that shows “librespot-python received callback”).
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.lowercased().contains("click on the following link to login")
+            || trimmed.contains("accounts.spotify.com/authorize") {
+            awaitingSpotifyLogin.value = true
+            setPhase(.signingIn)
+            downloadSpeedLabel = "Waiting for Spotify login…"
+            if !reauthHandoff.value {
+                reauthHandoff.value = true
+                showToast("Opening Spotify sign-in…", duration: 6)
+            }
+        }
+        if trimmed.lowercased().contains("login failed") {
+            awaitingSpotifyLogin.value = false
+            // Do NOT set reauthHandoff here — that wiped fresh credentials and broke login
+            // (LOGIN FAILED → signIn deletes creds → ConnectionResetError loop).
+            downloadSpeedLabel = "Spotify session error — retrying…"
+            setPhase(.retrying)
+        }
+
         if let match = line.range(of: #"Total Query Progress:\s*(\d+)\s*/\s*(\d+)"#, options: .regularExpression) {
             let slice = String(line[match])
             let nums = slice.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
             if nums.count >= 2 {
-                totalCompleted = min(nums[0], nums[1])
+                let finishedRows = songItems.filter(\.isFinished).count
+                // tqdm can race ahead of per-song rows — never show 24/24 while songs still wait.
+                totalCompleted = min(nums[1], max(finishedRows, nums[0]))
                 if !songCountLocked, nums[1] > totalExpected {
                     totalExpected = nums[1]
                     ensureSongCapacity(totalExpected)
+                } else if nums[1] > songItems.count {
+                    ensureSongCapacity(nums[1])
+                    totalExpected = max(totalExpected, nums[1])
+                }
+                // If capacity grew past known titles, refresh names once.
+                let placeholders = songItems.contains {
+                    $0.name.hasPrefix("Song ") || $0.name.hasPrefix("Track ") || $0.name.isEmpty
+                }
+                if placeholders,
+                   let url = queueItems[safe: currentQueueIndex]?.url,
+                   !url.isEmpty {
+                    let root = activeMusicRoot.isEmpty ? AppPaths.defaultMusicRoot.path : activeMusicRoot
+                    prefetchTrackTitlesInBackground(url: url, musicRoot: root)
                 }
             }
         }
@@ -1394,15 +2269,36 @@ final class DownloadService: ObservableObject {
         if isConverting { return }
 
         if let name = Self.extractHashtagQuoted(line, label: "SKIPPING") {
-            completeCurrentSong(name: cleanSongName(name), status: .skipped)
+            if downloadPhase != .downloading {
+                setPhase(.checkingExisting)
+            }
+            completeCurrentSong(name: cleanSongName(name), status: .skipped, skipReason: .alreadySaved)
+            return
+        }
+        // zotify prints "SKIPPING TRACK" for skip-existing — must NOT mark Failed.
+        if line.uppercased().contains("SKIPPING TRACK") {
+            if downloadPhase != .downloading {
+                setPhase(.checkingExisting)
+            }
+            let songName = songItems[safe: activeSongIndex ?? -1]?.name ?? "Song"
+            completeCurrentSong(name: songName, status: .skipped, skipReason: .alreadySaved)
             return
         }
         if let path = Self.extractHashtagQuoted(line, label: "DOWNLOADED") {
+            setPhase(.downloading)
             let base = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
             completeCurrentSong(name: cleanSongName(base), status: .done)
             return
         }
-        if line.contains("SKIPPING TRACK") || line.contains("FAILED TO GET CONTENT STREAM") {
+        if line.contains("FAILED TO GET CONTENT STREAM") {
+            // File may already exist (app folder or legacy Zotify Music) — don't show Failed.
+            if let idx = activeSongIndex, songItems.indices.contains(idx),
+               recoverSongFromDiskIfPresent(at: idx) {
+                totalCompleted = songItems.filter { $0.status == .done || $0.status == .skipped }.count
+                activeSongIndex = nil
+                markNextDownloading()
+                return
+            }
             let songName = songItems[safe: activeSongIndex ?? -1]?.name ?? "Song"
             completeCurrentSong(name: songName, status: .failed)
             return
@@ -1411,9 +2307,16 @@ final class DownloadService: ObservableObject {
         // tqdm-style percent for the active song (never after convert starts)
         if isConverting { return }
         if let speed = Self.extractSpeed(line) {
+            awaitingSpotifyLogin.value = false
             downloadSpeedLabel = speed
+            setPhase(.downloading)
         }
         if let pct = Self.extractPercent(line), let idx = activeSongIndex, songItems.indices.contains(idx) {
+            awaitingSpotifyLogin.value = false
+            // Tiny % while skipping is common — only treat real progress as downloading.
+            if pct >= 0.08 {
+                setPhase(.downloading)
+            }
             if songItems[idx].status == .pending {
                 songItems[idx].status = .downloading
             }
@@ -1444,35 +2347,17 @@ final class DownloadService: ObservableObject {
               songItems[idx].status == .downloading else { return }
         songItems[idx].status = .done
         songItems[idx].fraction = 1
-        totalCompleted = min(totalExpected, totalCompleted + 1)
+        refreshTotalProgressFromSongs()
     }
 
     private func finishAllSongsForConvert() {
         // Keep the playlist's expected size — never shrink to "only what finished".
         let preservedExpected = max(totalExpected, songItems.count, 1)
-        // Disk sync already marked real successes. Leftover downloading rows did not finish.
-        for i in songItems.indices where songItems[i].status == .downloading {
-            songItems[i].status = .failed
-            songItems[i].fraction = 1
-            if songItems[i].name.hasPrefix("Song ") {
-                songItems[i].name = "Track \(i + 1) — couldn’t get audio"
-            }
-        }
-        for i in songItems.indices where songItems[i].status == .pending {
-            songItems[i].status = .failed
-            songItems[i].fraction = 1
-            if songItems[i].name.hasPrefix("Song ") {
-                songItems[i].name = "Track \(i + 1) — couldn’t get audio"
-            }
-        }
         songCountLocked = true
         totalExpected = preservedExpected
-        totalCompleted = songItems.filter { $0.status == .done || $0.status == .skipped }.count
-        if songItems.contains(where: { $0.status == .failed }) {
-            downloadHadError = true
-        }
         activeSongIndex = nil
         downloadSpeedLabel = ""
+        refreshTotalProgressFromSongs()
     }
 
     private func beginConvert(format: String) {
@@ -1483,7 +2368,7 @@ final class DownloadService: ObservableObject {
         convertLabel = fmt == "FLAC" || format.lowercased() == "flac"
             ? "Converting to FLAC + lyrics…"
             : "Converting, tagging & renaming…"
-        statusMessage = "Converting…"
+        setPhase(.converting)
         downloadSpeedLabel = ""
         retryStatusMessage = ""
         activeSongIndex = nil
@@ -1558,40 +2443,70 @@ final class DownloadService: ObservableObject {
         }
     }
 
-    private func completeCurrentSong(name: String, status: SongDownloadItem.Status) {
+    private func completeCurrentSong(
+        name: String,
+        status: SongDownloadItem.Status,
+        skipReason: SongDownloadItem.SkipReason = .none
+    ) {
         if isConverting { return }
         // Never invent phantom "Song N" rows just because we finished one.
         ensureSongCapacity(totalExpected)
-        let idx: Int
-        if let active = activeSongIndex, songItems.indices.contains(active),
+
+        // Prefer matching the reported title to an unfinished row — skip/download lines
+        // often arrive while activeSongIndex still points at a different placeholder.
+        var idx: Int?
+        if !name.isEmpty {
+            let keys = Set(Self.candidateTitleKeys(for: name))
+            if !keys.isEmpty {
+                idx = songItems.firstIndex { song in
+                    !song.isFinished && Self.candidateTitleKeys(for: song.name).contains(where: keys.contains)
+                }
+            }
+        }
+        if idx == nil,
+           let active = activeSongIndex, songItems.indices.contains(active),
            songItems[active].status == .downloading || songItems[active].status == .pending {
             idx = active
-        } else if let next = songItems.firstIndex(where: { !$0.isFinished }) {
+        } else if idx == nil, let next = songItems.firstIndex(where: { !$0.isFinished }) {
             idx = next
-        } else if !songCountLocked {
-            let n = songItems.count + 1
-            songItems.append(SongDownloadItem(id: n, number: n, name: name, status: status, fraction: 1))
-            totalExpected = max(totalExpected, songItems.count)
-            totalCompleted = min(totalExpected, totalCompleted + 1)
-            markNextDownloading()
-            return
-        } else {
-            // Extra DOWNLOADED line after all known songs — ignore capacity growth.
-            if let last = songItems.indices.last(where: { songItems[$0].status == .downloading }) {
+        }
+
+        guard let idx else {
+            if !songCountLocked {
+                let n = songItems.count + 1
+                songItems.append(SongDownloadItem(
+                    id: n, number: n, name: name, status: status, fraction: 1,
+                    skipReason: status == .skipped ? skipReason : .none
+                ))
+                totalExpected = max(totalExpected, songItems.count)
+                totalCompleted = min(totalExpected, totalCompleted + 1)
+                markNextDownloading()
+            } else if let last = songItems.indices.last(where: { songItems[$0].status == .downloading }) {
                 songItems[last].name = name.isEmpty ? songItems[last].name : name
                 songItems[last].status = status
                 songItems[last].fraction = 1
+                if status == .skipped { songItems[last].skipReason = skipReason }
+                activeSongIndex = nil
             }
-            activeSongIndex = nil
             return
         }
 
-        if !name.isEmpty { songItems[idx].name = name }
+        // Keep richer "Artist — Title" labels when skip line only has a filename stem.
+        if !name.isEmpty {
+            let current = songItems[idx].name
+            let currentIsPlaceholder = current.hasPrefix("Song ") || current.hasPrefix("Track ") || current.isEmpty
+            if currentIsPlaceholder || current.count <= name.count {
+                songItems[idx].name = name
+            }
+        }
         songItems[idx].status = status
         songItems[idx].fraction = 1
-        totalCompleted = min(totalExpected, totalCompleted + 1)
+        if status == .skipped {
+            songItems[idx].skipReason = skipReason == .none ? .alreadySaved : skipReason
+        }
         activeSongIndex = nil
         markNextDownloading()
+        refreshTotalProgressFromSongs()
     }
 
     /// After a whole-playlist zotify run, sync Progress from disk — never invent success.
@@ -1604,12 +2519,20 @@ final class DownloadService: ObservableObject {
 
     /// Rebuild Progress names/statuses from `.song_ids` + audio files on disk.
     private func syncSongItemsFromDisk(root: String, playlistName: String) {
-        let folder = playlistName.isEmpty
-            ? root
-            : URL(fileURLWithPath: root).appendingPathComponent(playlistName).path
-        let scanPath = FileManager.default.fileExists(atPath: folder) ? folder : root
-        let rows = Self.readSongIdRows(in: scanPath)
-        let audioCount = Self.countAudioFiles(in: scanPath)
+        let scanPaths = Self.playlistScanPaths(root: root, playlistName: playlistName)
+        var rows: [SongIdRow] = []
+        var seenRowIds = Set<String>()
+        var files: [URL] = []
+        var seenFilePaths = Set<String>()
+        for path in scanPaths {
+            for row in Self.readSongIdRows(in: path) {
+                let key = row.id.isEmpty ? row.path : row.id
+                if seenRowIds.insert(key).inserted { rows.append(row) }
+            }
+            for file in Self.audioFileURLs(in: path) {
+                if seenFilePaths.insert(file.path).inserted { files.append(file) }
+            }
+        }
         let expected = max(totalExpected, songItems.count, sessionTrackIds.count, 1)
         ensureSongCapacity(expected)
 
@@ -1626,33 +2549,26 @@ final class DownloadService: ObservableObject {
                 let tid = songItems[i].trackId
                 guard !tid.isEmpty, let row = byId[tid] else { continue }
                 songItems[i].name = row.displayName
-                if songItems[i].status != .skipped {
-                    songItems[i].status = .done
-                    songItems[i].fraction = 1
-                }
-                matched += 1
-            }
-        } else {
-            // No track ids — use .song_ids / filenames positionally for saved files only.
-            let titles: [String] = {
-                if !rows.isEmpty { return rows.map(\.displayName) }
-                return Self.audioFileURLs(in: scanPath)
-                    .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
-                    .map { Self.titleFromAudioFilename($0.lastPathComponent) }
-                    .filter { !$0.isEmpty }
-            }()
-            let doneCount = min(max(titles.count, audioCount), songItems.count)
-            for i in 0..<doneCount {
-                if i < titles.count, !titles[i].isEmpty {
-                    songItems[i].name = titles[i]
+                if songItems[i].isDuplicateSkip { matched += 1; continue }
+                if songItems[i].status == .skipped && songItems[i].skipReason == .alreadySaved {
+                    matched += 1
+                    continue
                 }
                 if songItems[i].status != .skipped {
-                    songItems[i].status = .done
-                    songItems[i].fraction = 1
+                    if songItems[i].status == .failed { songItems[i].status = .pending }
+                    if let path = Self.resolveAudioPath(for: row, files: files) {
+                        markSongPresentOnDisk(at: i, filePath: path)
+                    }
                 }
                 matched += 1
             }
         }
+
+        // Recover rows that have audio on disk but no .song_ids entry (either library).
+        for i in songItems.indices where songItems[i].status == .failed {
+            songItems[i].status = .pending
+        }
+        matchUnmatchedSongsToAudioFiles(files: files, knownRows: rows)
 
         for i in songItems.indices {
             if songItems[i].status == .done || songItems[i].status == .skipped { continue }
@@ -1664,18 +2580,34 @@ final class DownloadService: ObservableObject {
         }
 
         totalExpected = expected
-        totalCompleted = songItems.filter { $0.status == .done || $0.status == .skipped }.count
+        let statusDone = songItems.filter { $0.status == .done || $0.status == .skipped }.count
         let failed = songItems.filter { $0.status == .failed }.count
-        // Honest disk check: never celebrate when files on disk < playlist size.
-        if audioCount < expected || failed > 0 || totalCompleted < expected {
+        if failed == 0 && statusDone >= expected {
+            downloadHadError = false
+            downloadErrorMessage = ""
+        } else if failed > 0 || statusDone < expected {
             downloadHadError = true
-            downloadErrorMessage = "Saved \(min(audioCount, totalCompleted)) of \(expected) songs"
+            var uniqueNames = Set<String>()
+            for file in files {
+                uniqueNames.insert(file.deletingPathExtension().lastPathComponent.lowercased())
+            }
+            let uniqueCount = uniqueNames.count
+            downloadErrorMessage = "Saved \(min(max(uniqueCount, statusDone), expected)) of \(expected) songs on disk"
                 + (failed > 0 ? " — \(failed) couldn’t be downloaded from Spotify." : ".")
         }
+        markDuplicateTracksAsSkipped()
+        let statusAfterDup = songItems.filter { $0.status == .done || $0.status == .skipped }.count
+        let failedAfterDup = songItems.filter { $0.status == .failed }.count
+        if failedAfterDup == 0 && statusAfterDup >= expected {
+            downloadHadError = false
+            downloadErrorMessage = ""
+        }
+        refreshTotalProgressFromSongs()
     }
 
     private struct SongIdRow {
         let id: String
+        let date: String
         let artist: String
         let title: String
         let path: String
@@ -1703,9 +2635,116 @@ final class DownloadService: ObservableObject {
             let path = parts[4]
             let key = id.isEmpty ? (path.isEmpty ? "\(artist)|\(title)" : path) : id
             guard seen.insert(key).inserted else { continue }
-            rows.append(SongIdRow(id: id, artist: artist, title: title, path: path))
+            rows.append(SongIdRow(id: id, date: parts[1], artist: artist, title: title, path: path))
         }
         return rows
+    }
+
+    private nonisolated static func writeSongIdRows(_ rows: [SongIdRow], in folder: String) {
+        let url = URL(fileURLWithPath: folder).appendingPathComponent(".song_ids")
+        let stamp = {
+            let f = DateFormatter()
+            f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+            return f.string(from: Date())
+        }()
+        var seen = Set<String>()
+        var lines: [String] = []
+        for row in rows {
+            guard !row.id.isEmpty, seen.insert(row.id).inserted else { continue }
+            let date = row.date.isEmpty ? stamp : row.date
+            lines.append("\(row.id)\t\(date)\t\(row.artist)\t\(row.title)\t\(row.path)")
+        }
+        let body = lines.joined(separator: "\n") + (lines.isEmpty ? "" : "\n")
+        try? body.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    /// Repair `.song_ids` paths and register title matches so zotify skips renamed / re-id tracks.
+    private nonisolated static func reconcilePlaylistSongArchive(
+        root: String,
+        playlistName: String,
+        trackIds: [String],
+        trackNames: [String]
+    ) {
+        guard let folder = playlistScanPaths(root: root, playlistName: playlistName).first else { return }
+
+        var titleToPath: [String: String] = [:]
+        func rememberTitle(_ title: String, path: String) {
+            let key = normalizedSongKey(title)
+            guard !key.isEmpty else { return }
+            if let existing = titleToPath[key] {
+                if path.lowercased().hasSuffix(".flac"), !existing.lowercased().hasSuffix(".flac") {
+                    titleToPath[key] = path
+                }
+            } else {
+                titleToPath[key] = path
+            }
+        }
+
+        for file in audioFileURLs(in: folder) {
+            rememberTitle(titleFromAudioFilename(file.lastPathComponent), path: file.path)
+        }
+
+        var rows = readSongIdRows(in: folder)
+        var knownIds = Set(rows.map(\.id))
+
+        for i in rows.indices {
+            var path = rows[i].path
+            if path.isEmpty || !FileManager.default.fileExists(atPath: path) {
+                if let hit = titleToPath[normalizedSongKey(rows[i].title)] {
+                    path = hit
+                    rows[i] = SongIdRow(
+                        id: rows[i].id, date: rows[i].date, artist: rows[i].artist,
+                        title: rows[i].title, path: hit
+                    )
+                }
+            }
+            if !path.isEmpty, FileManager.default.fileExists(atPath: path) {
+                rememberTitle(rows[i].title, path: path)
+            }
+        }
+
+        let count = max(trackIds.count, trackNames.count)
+        for i in 0..<count {
+            let tid = i < trackIds.count ? trackIds[i].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+            guard !tid.isEmpty, !knownIds.contains(tid) else { continue }
+            let display = i < trackNames.count ? trackNames[i] : ""
+            var matchedPath: String?
+            for key in candidateTitleKeys(for: display) {
+                if let path = titleToPath[key] {
+                    matchedPath = path
+                    break
+                }
+            }
+            guard let path = matchedPath else { continue }
+            let artist: String
+            let title: String
+            if let sep = display.range(of: " — ") ?? display.range(of: " - ") {
+                artist = String(display[..<sep.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+                title = String(display[sep.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            } else {
+                artist = ""
+                title = display.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            rows.append(SongIdRow(id: tid, date: "", artist: artist, title: title, path: path))
+            knownIds.insert(tid)
+        }
+
+        writeSongIdRows(rows, in: folder)
+    }
+
+    private nonisolated static func resolveAudioPath(for row: SongIdRow, files: [URL]) -> String? {
+        if !row.path.isEmpty, FileManager.default.fileExists(atPath: row.path) {
+            return row.path
+        }
+        let want = normalizedSongKey(row.title)
+        guard !want.isEmpty else { return nil }
+        for file in files {
+            let key = normalizedSongKey(titleFromAudioFilename(file.lastPathComponent))
+            if key == want || key.contains(want) || want.contains(key) {
+                return file.path
+            }
+        }
+        return nil
     }
 
     private func ensureSongCapacity(_ count: Int) {
@@ -1745,6 +2784,23 @@ final class DownloadService: ObservableObject {
         else { return nil }
         let pct = Double(ns.substring(with: match.range(at: 1))) ?? 0
         return min(1, max(0, pct / 100))
+    }
+
+    /// Spotify OAuth URL printed by zotify during an interactive login.
+    private nonisolated static func extractSpotifyAuthURL(from line: String) -> String? {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"https://accounts\.spotify\.com/authorize[^\s\"']+"#,
+            options: []
+        ) else { return nil }
+        let ns = line as NSString
+        guard let match = regex.firstMatch(in: line, range: NSRange(location: 0, length: ns.length)) else {
+            return nil
+        }
+        return ns.substring(with: match.range)
+    }
+
+    private nonisolated static func hasSpotifyCredentials() -> Bool {
+        FileManager.default.fileExists(atPath: AppPaths.zotifyCredentialsURL.path)
     }
 
     /// Parse tqdm rates like "850.2kB/s", "1.24MB/s", "1.05MiB/s", "420 B/s".
@@ -1809,18 +2865,33 @@ final class DownloadService: ObservableObject {
     ) -> PostprocessOutcome {
         let rootURL = URL(fileURLWithPath: root)
         let sourceExts: Set<String> = ["ogg", "mp3", "m4a", "aac", "opus", "wav"]
+        let postprocessExts = sourceExts.union(["flac"])
 
         func folderHasSourceAudio(_ url: URL) -> Bool {
             let names = (try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []
             return names.contains { sourceExts.contains(($0 as NSString).pathExtension.lowercased()) }
         }
 
+        func folderNeedsPostprocess(_ url: URL) -> Bool {
+            let names = (try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []
+            return names.contains { postprocessExts.contains(($0 as NSString).pathExtension.lowercased()) }
+        }
+
+        let folderQualifies = playlistNames.isEmpty ? folderHasSourceAudio : folderNeedsPostprocess
+
         var targets: [URL] = []
         for name in playlistNames {
-            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmed = sanitizePlaylistFolderName(name)
             guard !trimmed.isEmpty else { continue }
+            // Prefer the same scan paths used for Progress / skip-existing (handles Unicode forms).
+            for path in playlistScanPaths(root: root, playlistName: name) {
+                let url = URL(fileURLWithPath: path, isDirectory: true)
+                if folderQualifies(url), !targets.contains(where: { $0.path == url.path }) {
+                    targets.append(url)
+                }
+            }
             let exact = rootURL.appendingPathComponent(trimmed, isDirectory: true)
-            if folderHasSourceAudio(exact) {
+            if folderQualifies(exact), !targets.contains(where: { $0.path == exact.path }) {
                 targets.append(exact)
                 continue
             }
@@ -1831,11 +2902,43 @@ final class DownloadService: ObservableObject {
             ) {
                 let match = dirs.first { dir in
                     dir.lastPathComponent.localizedCaseInsensitiveCompare(trimmed) == .orderedSame
-                        && folderHasSourceAudio(dir)
+                        && folderQualifies(dir)
                 }
-                if let match { targets.append(match) }
+                if let match, !targets.contains(where: { $0.path == match.path }) {
+                    targets.append(match)
+                    continue
+                }
+            }
+            // Rescue flat downloads: move root-level source audio into the playlist folder.
+            if folderHasSourceAudio(rootURL) {
+                try? FileManager.default.createDirectory(at: exact, withIntermediateDirectories: true)
+                let names = (try? FileManager.default.contentsOfDirectory(atPath: rootURL.path)) ?? []
+                var moved = 0
+                for fileName in names {
+                    let ext = (fileName as NSString).pathExtension.lowercased()
+                    guard sourceExts.contains(ext) else { continue }
+                    let src = rootURL.appendingPathComponent(fileName)
+                    var isDir: ObjCBool = false
+                    guard FileManager.default.fileExists(atPath: src.path, isDirectory: &isDir), !isDir.boolValue else { continue }
+                    let dest = exact.appendingPathComponent(fileName)
+                    if FileManager.default.fileExists(atPath: dest.path) { continue }
+                    do {
+                        try FileManager.default.moveItem(at: src, to: dest)
+                        moved += 1
+                    } catch {
+                        continue
+                    }
+                }
+                if folderQualifies(exact), !targets.contains(where: { $0.path == exact.path }) {
+                    targets.append(exact)
+                }
+            }
+            // Always post-process the playlist folder after a download when it has audio.
+            if folderNeedsPostprocess(exact), !targets.contains(where: { $0.path == exact.path }) {
+                targets.append(exact)
             }
         }
+
 
         if targets.isEmpty {
             guard let folders = try? FileManager.default.contentsOfDirectory(
@@ -1891,23 +2994,31 @@ final class DownloadService: ObservableObject {
                 onLine("Note: converting to FLAC (preferred). Requested “\(format)” isn’t supported by the converter yet.")
             }
             onLine("Post-process → \(folder.lastPathComponent)")
-            var args = [folder.path]
+            var args = [folder.path, "--format", format.isEmpty ? "flac" : format.lowercased()]
             if !genre.isEmpty { args += ["--genre", genre] }
             do {
                 let result: CommandResult
-                if let py = ZotifyCLI.anacondaPythonURL {
+                // `zotify-postprocess` is a bash wrapper — never pass it to python3 as a script.
+                // Prefer the real .py next to it when invoking via a Python interpreter.
+                let script = Self.postprocessPythonScript(from: post)
+                let python = AppPaths.bundledPythonURL ?? ZotifyCLI.anacondaPythonURL
+                if let py = python, let script {
                     result = try ZotifyCLI.run(
                         executable: py,
-                        arguments: [post.path] + args,
+                        arguments: [script.path] + args,
                         onLine: onLine,
-                        isCancelled: { flag.value }
+                        isCancelled: { flag.value },
+                        // Convert can hash/tag hundreds of files with quiet stretches —
+                        // never apply the Spotify download stall killer here.
+                        stallTimeout: 0
                     )
                 } else {
                     result = try ZotifyCLI.run(
                         executable: post,
                         arguments: args,
                         onLine: onLine,
-                        isCancelled: { flag.value }
+                        isCancelled: { flag.value },
+                        stallTimeout: 0
                     )
                 }
                 if result.exitCode != 0 {
@@ -2293,8 +3404,10 @@ final class DownloadService: ObservableObject {
     }
 
     /// Interactive Spotify OAuth — opens the login URL in the default browser.
+    /// - Parameter forceFreshLogin: When true (Preferences), delete existing credentials first.
+    ///   Mid-download handoff should pass false so a just-saved session isn’t wiped.
     @discardableResult
-    func signInWithSpotify(store: AppStore) async -> Bool {
+    func signInWithSpotify(store: AppStore, forceFreshLogin: Bool = true) async -> Bool {
         if isSigningIn {
             cancelSignIn()
             // Brief pause so the previous listener can exit.
@@ -2309,6 +3422,15 @@ final class DownloadService: ObservableObject {
             isSigningIn = false
             pendingAuthURL = nil
         }
+
+        // Preflight: friend Macs often install only the DMG (no zotify/python deps).
+        guard let python = ZotifyCLI.pythonWithZotifyURL else {
+            appendLog("Setup needed: install zotify on this Mac first (see Help / zotify-tools).")
+            showToast("Install zotify first, then sign in")
+            return false
+        }
+
+
         appendLog("Opening Spotify sign-in in your browser…")
 
         let script = #"""
@@ -2329,9 +3451,9 @@ final class DownloadService: ObservableObject {
         Zotify.start()
         Zotify.CONFIG.load(args)
 
-        # Always run interactive browser login (ignore leftover bad credentials).
         cred_path = Path(Zotify.CONFIG.get_credentials_location())
-        if cred_path.exists():
+        # Only wipe credentials for an explicit Preferences re-login.
+        if __FORCE_FRESH__ and cred_path.exists():
             try:
                 cred_path.unlink()
             except Exception:
@@ -2417,8 +3539,8 @@ final class DownloadService: ObservableObject {
         print("OZ_JSON|" + json.dumps({"ok": True, "saved": Path(cred_path).exists()}), flush=True)
         """#
             .replacingOccurrences(of: "__OZ_CONFIG__", with: AppPaths.pythonPathLiteral(AppPaths.zotifyConfigURL))
+            .replacingOccurrences(of: "__FORCE_FRESH__", with: forceFreshLogin ? "True" : "False")
 
-        let python = ZotifyCLI.which("python3") ?? URL(fileURLWithPath: "/usr/bin/python3")
         let cancel = signInCancelFlag
 
         do {
@@ -2436,6 +3558,7 @@ final class DownloadService: ObservableObject {
                                     DispatchQueue.main.async {
                                         let firstOpen = self.pendingAuthURL == nil
                                         self.pendingAuthURL = urlString
+                                        Self.writeE2EAuthURL(urlString)
                                         if firstOpen {
                                             NSWorkspace.shared.open(url)
                                             self.appendLog("Browser opened — finish signing in with Spotify.")
@@ -2449,7 +3572,9 @@ final class DownloadService: ObservableObject {
                                     DispatchQueue.main.async { self.appendLog(line) }
                                 }
                             },
-                            isCancelled: { cancel.value }
+                            isCancelled: { cancel.value },
+                            // OAuth waits on the browser with no stdout — never stall-kill.
+                            stallTimeout: 0
                         )
                         cont.resume(returning: r)
                     } catch {
@@ -2471,17 +3596,50 @@ final class DownloadService: ObservableObject {
                 return true
             }
 
+            let detail = Self.signInFailureDetail(from: result)
+
             if result.exitCode != 0 {
-                appendLog("Sign-in didn’t finish. Try again.")
-                showToast("Sign-in didn’t finish — try again")
+                appendLog("Sign-in didn’t finish. \(detail)")
+                showToast(detail)
             } else if pendingAuthURL == nil {
                 appendLog("Sign-in started but no browser URL was received. Try again.")
+                showToast("Sign-in couldn’t open the browser — try again")
             }
         } catch {
             appendLog("Sign-in failed: \(error.localizedDescription)")
             showToast("Sign-in failed")
         }
         return false
+    }
+
+    private nonisolated static func signInFailureDetail(from result: CommandResult) -> String {
+        if result.exitCode == 124 {
+            return "Sign-in timed out — try again"
+        }
+        if let obj = result.ozJSON(), let err = obj["error"] as? String, !err.isEmpty {
+            let lower = err.lowercased()
+            if lower.contains("module") || lower.contains("zotify") {
+                return "Install zotify first, then sign in"
+            }
+            return "Sign-in didn’t finish — try again"
+        }
+        let lower = result.output.lowercased()
+        if lower.contains("no module named 'zotify'") || lower.contains("no module named \"zotify\"") {
+            return "Install zotify first, then sign in"
+        }
+        if lower.contains("modulenotfounderror") || lower.contains("no module named") {
+            return "Install zotify first, then sign in"
+        }
+        return "Sign-in didn’t finish — try again"
+    }
+
+    /// When OZ_E2E=1, write the authorize URL so oauth_browser_helper.py can complete login.
+    nonisolated private static func writeE2EAuthURL(_ urlString: String) {
+        guard ProcessInfo.processInfo.environment["OZ_E2E"] == "1" else { return }
+        let dir = AppPaths.supportDir
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent("e2e_oauth_url.txt")
+        try? urlString.write(to: file, atomically: true, encoding: .utf8)
     }
 }
 private extension Array {

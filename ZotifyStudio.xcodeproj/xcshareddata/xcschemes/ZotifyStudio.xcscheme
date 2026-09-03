@@ -15,8 +15,22 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "66165559CF274B0EA70B9ED9"
-               BuildableName = "ZotifyStudio.app"
+               BuildableName = "OzDownloader.app"
                BlueprintName = "ZotifyStudio"
+               ReferencedContainer = "container:ZotifyStudio.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "382CA3A8776A4157B5C9D8B1"
+               BuildableName = "ZotifyStudioUITests.xctest"
+               BlueprintName = "ZotifyStudioUITests"
                ReferencedContainer = "container:ZotifyStudio.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -28,6 +42,34 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "YES">
+      <Testables>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "382CA3A8776A4157B5C9D8B1"
+               BuildableName = "ZotifyStudioUITests.xctest"
+               BlueprintName = "ZotifyStudioUITests"
+               ReferencedContainer = "container:ZotifyStudio.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+      </Testables>
+      <MacroExpansion>
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "66165559CF274B0EA70B9ED9"
+            BuildableName = "OzDownloader.app"
+            BlueprintName = "ZotifyStudio"
+            ReferencedContainer = "container:ZotifyStudio.xcodeproj">
+         </BuildableReference>
+      </MacroExpansion>
+      <EnvironmentVariables>
+         <EnvironmentVariable
+            key = "OZ_E2E"
+            value = "1"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+      </EnvironmentVariables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"
@@ -44,7 +86,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "66165559CF274B0EA70B9ED9"
-            BuildableName = "ZotifyStudio.app"
+            BuildableName = "OzDownloader.app"
             BlueprintName = "ZotifyStudio"
             ReferencedContainer = "container:ZotifyStudio.xcodeproj">
          </BuildableReference>
@@ -61,7 +103,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "66165559CF274B0EA70B9ED9"
-            BuildableName = "ZotifyStudio.app"
+            BuildableName = "OzDownloader.app"
             BlueprintName = "ZotifyStudio"
             ReferencedContainer = "container:ZotifyStudio.xcodeproj">
          </BuildableReference>

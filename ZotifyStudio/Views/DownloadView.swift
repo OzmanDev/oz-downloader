@@ -7,7 +7,6 @@ struct DownloadView: View {
     @EnvironmentObject private var previews: LinkPreviewService
 
     @State private var linkFieldFocused = false
-    @State private var searchPulse = false
     @State private var celebrationScale: CGFloat = 0
     @State private var celebrationOpacity: Double = 0
     @State private var confettiPhase: Int = 0
@@ -19,10 +18,6 @@ struct DownloadView: View {
 
                 pasteCard
                 previewSection
-
-                if hasActiveLinkPreview {
-                    optionsCard
-                }
 
                 actionsRow
 
@@ -37,17 +32,11 @@ struct DownloadView: View {
                 }
             }
             .padding(24)
+            // Hard-disable layout animations when Preview / Progress appear or resize.
+            .transaction { $0.disablesAnimations = true }
         }
         .onChange(of: previews.urlsText) { newValue in
             previews.schedulePreview(for: newValue, musicRoot: store.settings.rootPath)
-        }
-        .onChange(of: previews.isLoading) { loading in
-            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
-                searchPulse = loading
-            }
-            if !loading {
-                searchPulse = false
-            }
         }
         .onAppear {
             if !previews.urlsText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -65,17 +54,9 @@ struct DownloadView: View {
             celebrationOpacity = 0
         }
         .onChange(of: downloads.showCelebration) { show in
-            if show {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.55, blendDuration: 0)) {
-                    celebrationScale = 1
-                }
-                withAnimation(.easeOut(duration: 0.4)) {
-                    celebrationOpacity = 1
-                }
-            } else {
-                celebrationScale = 0
-                celebrationOpacity = 0
-            }
+            // No withAnimation — animating celebration was blanking the whole Get Music scroll view.
+            celebrationScale = show ? 1 : 0
+            celebrationOpacity = show ? 1 : 0
         }
     }
 
@@ -103,12 +84,11 @@ struct DownloadView: View {
                 Image(systemName: "link")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(linkFieldFocused || previews.isLoading ? Color.accentColor : .secondary)
-                    .scaleEffect(previews.isLoading && searchPulse ? 1.12 : 1.0)
-                    .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: searchPulse)
 
                 TextField("Paste a Spotify playlist, album, or song link", text: $previews.urlsText)
                     .textFieldStyle(.plain)
                     .font(.body)
+                    .accessibilityIdentifier("getMusic.urlField")
                     .onSubmit {
                         previews.refreshNow(urlsText: previews.urlsText, musicRoot: store.settings.rootPath)
                     }
@@ -116,12 +96,9 @@ struct DownloadView: View {
                 if previews.isLoading {
                     ProgressView()
                         .controlSize(.small)
-                        .transition(.opacity.combined(with: .scale))
                 } else if !previews.urlsText.isEmpty {
                     Button {
-                        withAnimation(.easeOut(duration: 0.15)) {
-                            previews.clear()
-                        }
+                        previews.clear()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
@@ -140,44 +117,29 @@ struct DownloadView: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(linkBorderColor, lineWidth: previews.isLoading || previews.inputError != nil ? 1.5 : 1)
             )
-            .shadow(
-                color: previews.isLoading
-                    ? Color.accentColor.opacity(searchPulse ? 0.28 : 0.08)
-                    : .black.opacity(0.12),
-                radius: previews.isLoading ? 10 : 4,
-                y: 2
-            )
-            .animation(.easeInOut(duration: 0.25), value: previews.isLoading)
-            .animation(.easeInOut(duration: 0.25), value: previews.inputError)
+            .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
             .onTapGesture { linkFieldFocused = true }
 
             if previews.isLoading {
-                HStack(spacing: 8) {
-                    SearchingDots()
-                    Text("Searching Spotify…")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                Text("Searching Spotify…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             } else if let err = previews.inputError {
                 Label(err, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
             } else {
                 Text("Playlist, album, or song from Spotify.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
         }
-        .animation(.easeInOut(duration: 0.22), value: previews.isLoading)
-        .animation(.easeInOut(duration: 0.22), value: previews.inputError)
     }
 
     private var linkBorderColor: Color {
         if previews.inputError != nil { return .red.opacity(0.75) }
-        if previews.isLoading { return Color.accentColor.opacity(searchPulse ? 0.9 : 0.45) }
+        if previews.isLoading { return Color.accentColor.opacity(0.7) }
         if linkFieldFocused { return Color.accentColor.opacity(0.55) }
         return Color.secondary.opacity(0.28)
     }
@@ -197,10 +159,8 @@ struct DownloadView: View {
                         canDownload: !collectURLs().isEmpty,
                         onDownload: index == okPreviews.first?.offset ? { start() } : nil
                     )
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
-            .animation(.spring(response: 0.35, dampingFraction: 0.86), value: previews.previews)
         } else if shouldShowPreviewLoader {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Preview")
@@ -225,51 +185,6 @@ struct DownloadView: View {
         return hasInput && !hasError && !previews.hasRenderablePreview && previews.isLoading
     }
 
-    private var optionsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Save as")
-                .font(.headline)
-
-            Picker("File format", selection: Binding(
-                get: { store.settings.convertFormat },
-                set: { store.settings.convertFormat = $0 }
-            )) {
-                ForEach(AudioFormatChoice.allCases) { opt in
-                    Text(opt.label).tag(opt.rawValue)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .frame(maxWidth: 320, alignment: .leading)
-
-            Toggle("Convert files after downloading", isOn: Binding(
-                get: { store.settings.autoPostprocess },
-                set: { store.settings.autoPostprocess = $0 }
-            ))
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Genre tag")
-                    .font(.subheadline.weight(.medium))
-                Text("Optional — written into each file’s tags when converting (e.g. for DJing / library sorting).")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                TextField(
-                    "",
-                    text: Binding(
-                        get: { store.settings.defaultGenre },
-                        set: { store.settings.defaultGenre = $0 }
-                    ),
-                    prompt: Text("e.g. Afrobeats, House")
-                )
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 320)
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .controlBackgroundColor)))
-    }
-
     private var actionsRow: some View {
         HStack(spacing: 12) {
             if downloads.isRunning {
@@ -277,6 +192,7 @@ struct DownloadView: View {
                     downloads.stop()
                 }
                 .controlSize(.large)
+                .accessibilityIdentifier("getMusic.cancel")
             }
 
             Button {
@@ -285,14 +201,17 @@ struct DownloadView: View {
                 Label("Open default download folder", systemImage: "folder")
             }
             .controlSize(.large)
+            .accessibilityIdentifier("getMusic.openFolder")
 
             Spacer()
 
-            if downloads.isRunning, !downloads.statusMessage.isEmpty {
-                Text(friendlyStatus(downloads.statusMessage))
+            if downloads.isConverting {
+                Text(downloads.convertLabel.isEmpty ? "Converting…" : downloads.convertLabel)
                     .foregroundStyle(.secondary)
-            } else if downloads.isConverting {
-                Text("Converting…")
+            } else if downloads.isRunning {
+                Text(downloads.phaseStatusLabel.isEmpty
+                     ? friendlyStatus(downloads.statusMessage)
+                     : downloads.phaseStatusLabel)
                     .foregroundStyle(.secondary)
             }
         }
@@ -303,7 +222,15 @@ struct DownloadView: View {
             HStack {
                 Label("Progress", systemImage: "waveform")
                     .font(.headline)
+                    .accessibilityIdentifier("progress.card")
                 Spacer()
+                if downloads.isRunning {
+                    Button("Cancel", role: .destructive) {
+                        downloads.stop()
+                    }
+                    .controlSize(.small)
+                    .accessibilityIdentifier("progress.cancel")
+                }
                 if downloads.isConverting {
                     Text(downloads.convertLabel.isEmpty ? "Converting…" : downloads.convertLabel)
                         .font(.subheadline.weight(.medium))
@@ -316,15 +243,15 @@ struct DownloadView: View {
                         Text("Preparing convert…")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                    } else if downloads.downloadSpeedLabel.isEmpty {
-                        Text("Fetching track info…")
-                            .font(.subheadline)
-                            .foregroundStyle(.tertiary)
-                    } else {
+                    } else if !downloads.downloadSpeedLabel.isEmpty {
                         Text(downloads.downloadSpeedLabel)
                             .font(.subheadline.monospacedDigit().weight(.semibold))
                             .foregroundStyle(.secondary)
-                            .accessibilityLabel("Download speed")
+                            .accessibilityLabel("Download status")
+                    } else {
+                        Text(downloads.phaseStatusLabel.isEmpty ? "Starting…" : downloads.phaseStatusLabel)
+                            .font(.subheadline)
+                            .foregroundStyle(.tertiary)
                     }
                     ProgressView()
                         .controlSize(.small)
@@ -336,6 +263,7 @@ struct DownloadView: View {
             } else {
                 Text(progressSummary)
                     .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("progress.summary")
             }
 
             if !downloads.retryStatusMessage.isEmpty, downloads.isRunning {
@@ -351,13 +279,13 @@ struct DownloadView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if downloads.queueItems.count > 1 || downloads.queueItems.contains(where: { $0.status == .pending }) {
+            if !downloads.queueItems.isEmpty {
                 playlistQueueSection
             }
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text(downloads.queueItems.count > 1 ? "This playlist" : "Total")
+                    Text(downloads.isConverting ? "Convert" : (downloads.queueItems.count > 1 ? "This playlist" : "Total"))
                         .font(.subheadline.weight(.medium))
                     Spacer()
                     Text(totalProgressLabel)
@@ -370,9 +298,7 @@ struct DownloadView: View {
             }
 
             Button {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    downloads.showProgressDetails.toggle()
-                }
+                downloads.showProgressDetails.toggle()
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "chevron.right")
@@ -397,9 +323,30 @@ struct DownloadView: View {
                     } else {
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 10) {
-                                ForEach(downloads.songItems) { song in
+                                let mainSongs = downloads.songItems.filter { !$0.isDuplicateSkip && $0.skipReason != .alreadySaved }
+                                let duplicates = downloads.songItems.filter(\.isDuplicateSkip)
+                                let alreadySaved = downloads.songItems.filter {
+                                    $0.status == .skipped && $0.skipReason == .alreadySaved
+                                }
+
+                                ForEach(mainSongs) { song in
                                     songRow(song)
                                 }
+
+                                if !duplicates.isEmpty {
+                                    sectionHeader("Duplicates · skipped (\(duplicates.count))")
+                                    ForEach(duplicates) { song in
+                                        songRow(song)
+                                    }
+                                }
+
+                                if !alreadySaved.isEmpty {
+                                    sectionHeader("Already on disk · skipped (\(alreadySaved.count))")
+                                    ForEach(alreadySaved) { song in
+                                        songRow(song)
+                                    }
+                                }
+
                                 if showsConvertStep {
                                     convertStepRow
                                 }
@@ -444,7 +391,6 @@ struct DownloadView: View {
                         Text(emoji)
                             .font(.title2)
                             .scaleEffect(tick == idx ? 1.3 : 1.0)
-                            .animation(.spring(response: 0.3, dampingFraction: 0.5), value: tick)
                     }
                 }
             }
@@ -454,7 +400,10 @@ struct DownloadView: View {
     }
 
     private var showsConvertStep: Bool {
-        downloads.autoConvertEnabled && !downloads.songItems.isEmpty
+        // Only show convert once download rows are done or convert is actually running.
+        guard downloads.autoConvertEnabled, !downloads.songItems.isEmpty else { return false }
+        if downloads.isConverting || downloads.convertFraction > 0 { return true }
+        return downloads.songItems.allSatisfy(\.isFinished) && !downloads.isRunning
     }
 
     private var convertStepRow: some View {
@@ -534,9 +483,20 @@ struct DownloadView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            ProgressView(value: song.fraction)
+            ProgressView(value: songBarValue(song))
                 .progressViewStyle(.linear)
                 .tint(songBarColor(song))
+        }
+    }
+
+    private func songBarValue(_ song: SongDownloadItem) -> Double {
+        if downloads.isConverting, !song.isFinished {
+            return max(0.08, downloads.convertFraction)
+        }
+        switch song.status {
+        case .done, .skipped, .failed: return 1
+        case .downloading: return max(song.fraction, 0.05)
+        case .pending: return 0
         }
     }
 
@@ -583,7 +543,10 @@ struct DownloadView: View {
                         .buttonStyle(.plain)
                         .help("Cancel this playlist")
                     }
-                    if role == "Now", downloads.isRunning {
+                    if role == "Now", downloads.isConverting {
+                        ProgressView()
+                            .controlSize(.mini)
+                    } else if role == "Now", downloads.isRunning {
                         ProgressView()
                             .controlSize(.mini)
                     } else if role == "Done" {
@@ -619,8 +582,13 @@ struct DownloadView: View {
     }
 
     private var totalProgressLabel: String {
-        if downloads.totalExpected > 0 {
-            return "\(downloads.totalCompleted) of \(downloads.totalExpected)"
+        if downloads.isConverting {
+            return "\(Int(downloads.convertFraction * 100))%"
+        }
+        let expected = max(downloads.totalExpected, downloads.songItems.count, 0)
+        if expected > 0 {
+            let finished = downloads.songItems.filter(\.isFinished).count
+            return "\(finished) of \(expected)"
         }
         if downloads.isRunning {
             return "Starting…"
@@ -631,20 +599,38 @@ struct DownloadView: View {
     private var progressSummary: String {
         if downloads.isConverting {
             return downloads.convertLabel.isEmpty
-                ? "Converting downloaded files…"
+                ? "Converting downloaded files to FLAC, embedding lyrics, and renaming…"
                 : downloads.convertLabel
         }
         if downloads.isRunning {
-            if !downloads.songItems.isEmpty, downloads.songItems.allSatisfy(\.isFinished) {
-                return "Download done — converting to FLAC, embedding lyrics, and renaming…"
+            let finished = downloads.songItems.filter(\.isFinished).count
+            let expected = max(downloads.totalExpected, downloads.songItems.count, 0)
+            if !downloads.songItems.isEmpty,
+               downloads.songItems.allSatisfy(\.isFinished),
+               downloads.autoConvertEnabled {
+                return "Download done — starting convert…"
             }
             if downloads.queueItems.count > 1,
                let current = downloads.queueItems.first(where: { $0.status == .downloading }) {
                 let n = downloads.currentQueueIndex + 1
                 let total = downloads.queueItems.count
-                return "Downloading “\(current.name)” (\(n) of \(total)). You can leave this window open."
+                let phaseBit: String
+                switch downloads.downloadPhase {
+                case .checkingExisting: phaseBit = "Checking existing songs"
+                case .downloading: phaseBit = "Downloading new songs"
+                case .fetchingTrackInfo: phaseBit = "Fetching track list"
+                case .signingIn: phaseBit = "Waiting for Spotify sign-in"
+                case .retrying: phaseBit = "Retrying"
+                default: phaseBit = "Working on"
+                }
+                return "\(phaseBit) “\(current.name)” (\(n) of \(total)). You can leave this window open."
             }
-            return "Downloading your music. You can leave this window open."
+            let summary = downloads.phaseProgressSummary
+            if !summary.isEmpty { return summary }
+            if expected > 0, finished > 0 {
+                return "Working on your music (\(finished) of \(expected) saved). You can leave this window open."
+            }
+            return "Working on your music. You can leave this window open."
         }
         if downloads.songItems.isEmpty && downloads.queueItems.isEmpty {
             return "Ready when you are."
@@ -678,12 +664,33 @@ struct DownloadView: View {
         return friendlyStatus(downloads.statusMessage)
     }
 
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.top, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private func songStatusLabel(_ song: SongDownloadItem) -> String {
+        if downloads.isConverting, !song.isFinished {
+            return "Converting…"
+        }
         switch song.status {
         case .pending: return "Waiting"
-        case .downloading: return "\(Int(song.fraction * 100))%"
+        case .downloading:
+            if downloads.downloadPhase == .checkingExisting, song.fraction < 0.08 {
+                return "Checking…"
+            }
+            return "\(Int(song.fraction * 100))%"
         case .done: return "Done"
-        case .skipped: return "Skipped"
+        case .skipped:
+            switch song.skipReason {
+            case .duplicate: return "Skipped · duplicate"
+            case .alreadySaved: return "Skipped · on disk"
+            case .cancelled: return "Cancelled"
+            case .none: return "Skipped"
+            }
         case .failed: return "Failed"
         }
     }
@@ -709,13 +716,16 @@ struct DownloadView: View {
     private func friendlyStatus(_ raw: String) -> String {
         switch raw.lowercased() {
         case "downloading…", "downloading...": return "Downloading…"
+        case "checking existing songs…", "checking existing songs...": return "Checking existing songs…"
+        case "fetching track list…", "fetching track list...",
+             "fetching track info…", "fetching track info...": return "Fetching track list…"
         case "converting…", "converting...": return "Converting to FLAC…"
         case "adding lyrics…", "adding lyrics...": return "Adding lyrics…"
         case "renaming…", "renaming...": return "Renaming songs…"
         case "done": return "Finished"
         case "stopped": return "Cancelled"
         case "setup needed": return "Setup needed — install zotify first"
-        case "stopping…", "stopping...": return "Cancelling…"
+        case "stopping…", "stopping...", "cancelling…", "cancelling...": return "Cancelling…"
         default: return raw
         }
     }
@@ -809,22 +819,5 @@ struct DownloadView: View {
         let url = URL(fileURLWithPath: store.settings.rootPath)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         NSWorkspace.shared.open(url)
-    }
-}
-
-private struct SearchingDots: View {
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 0.28, paused: false)) { context in
-            let phase = Int(context.date.timeIntervalSinceReferenceDate / 0.28) % 3
-            HStack(spacing: 3) {
-                ForEach(0..<3, id: \.self) { i in
-                    Circle()
-                        .fill(Color.accentColor.opacity(phase == i ? 1 : 0.35))
-                        .frame(width: 5, height: 5)
-                        .scaleEffect(phase == i ? 1.25 : 1)
-                }
-            }
-            .animation(.easeInOut(duration: 0.2), value: phase)
-        }
     }
 }

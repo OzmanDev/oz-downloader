@@ -1,0 +1,64 @@
+{
+  "name": "oz-downloader",
+  "version": "0.1.0",
+  "description": "Native desktop app for downloading Spotify playlists, albums, and tracks.",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "build:all": "npm run build && npm run build:electron",
+    "dist:win": "node ../scripts/verify_windows_runtime.js && npm run build:all && electron-builder --win --x64",
+    "bundle:runtime": "node -e \"const {execSync}=require('child_process'); const isWin=process.platform==='win32'; execSync(isWin ? 'powershell -ExecutionPolicy Bypass -File ../scripts/bundle_windows_runtime.ps1' : 'bash ../scripts/bundle_windows_runtime.sh', {stdio:'inherit', cwd: process.cwd()})\""
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.475.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^3.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "electron": "^34.2.0",
+    "electron-builder": "^25.1.8",
+    "postcss": "^8.5.2",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0"
+  },
+  "build": {
+    "appId": "com.oz.downloader",
+    "productName": "Oz Downloader",
+    "directories": {
+      "output": "dist-installer"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/runtime",
+        "to": "runtime",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Oz Downloader",
+      "uninstallDisplayName": "Oz Downloader",
+      "artifactName": "OzDownloader-Installer.exe"
+    }
+  }
+}
