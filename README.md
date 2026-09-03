@@ -74,9 +74,9 @@ Creates:
 **Important:** The Windows installer must be built **on a Windows PC** so Python, zotify, and ffmpeg can be bundled inside the app (same as the Mac DMG).
 
 **Prerequisites on Windows:**
-1. **Node.js LTS** from https://nodejs.org (must provide `npm` on PATH)
+1. **Node.js LTS** from https://nodejs.org — enable **Add to PATH**, then verify with `node -v` and `npm -v`
 2. Git (for cloning zotify during the runtime bundle)
-3. Open a **new** PowerShell after installing Node
+3. Open a **new** PowerShell after installing Node (or refresh PATH)
 
 On Windows (PowerShell):
 
