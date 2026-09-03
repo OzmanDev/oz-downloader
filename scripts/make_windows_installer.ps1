@@ -7,19 +7,43 @@ $WinDir = Join-Path $Root "windows"
 
 Set-Location $WinDir
 
-function Require-Command([string]$Name, [string]$Hint) {
-    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
-        Write-Host "ERROR: '$Name' was not found on PATH."
-        Write-Host $Hint
-        exit 1
+# Node installers often update Machine/User PATH without refreshing this shell.
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
+            [System.Environment]::GetEnvironmentVariable("Path", "User")
+
+function Find-Npm {
+    $cmd = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    $cmd = Get-Command npm -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+
+    $candidates = @(
+        (Join-Path ${env:ProgramFiles} "nodejs\npm.cmd"),
+        (Join-Path ${env:ProgramFiles(x86)} "nodejs\npm.cmd"),
+        (Join-Path $env:LOCALAPPDATA "Programs\nodejs\npm.cmd"),
+        (Join-Path $env:APPDATA "nvm\nodejs\npm.cmd")
+    )
+    foreach ($path in $candidates) {
+        if ($path -and (Test-Path $path)) { return $path }
     }
+    return $null
 }
 
-Require-Command "npm" @"
-Install Node.js LTS from https://nodejs.org (includes npm), then open a NEW PowerShell
-window and re-run:
-  powershell -ExecutionPolicy Bypass -File .\scripts\make_windows_installer.ps1
-"@
+$Npm = Find-Npm
+if (-not $Npm) {
+    Write-Host "ERROR: npm was not found on PATH."
+    Write-Host ""
+    Write-Host "Install Node.js LTS from https://nodejs.org (check 'Add to PATH'),"
+    Write-Host "then close this window and open a NEW PowerShell, or run:"
+    Write-Host '  $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")'
+    Write-Host ""
+    Write-Host "Verify with:  node -v   and   npm -v"
+    Write-Host "Then re-run:"
+    Write-Host "  powershell -ExecutionPolicy Bypass -File .\scripts\make_windows_installer.ps1"
+    exit 1
+}
+
+Write-Host "==> Using npm: $Npm"
 
 Write-Host "==> Bundling Windows embedded runtime if missing"
 $RuntimeDir = Join-Path $WinDir "resources\runtime"
@@ -31,10 +55,10 @@ if (-not (Test-Path $RuntimeExe) -or -not (Test-Path $RuntimePost) -or -not (Tes
 }
 
 Write-Host "==> Installing Node dependencies"
-npm install
+& $Npm install
 
 Write-Host "==> Compiling React UI and Electron processes"
-npm run build:all
+& $Npm run build:all
 
 Write-Host "==> Generating Windows NSIS Installer (OzDownloader-Installer.exe)"
 if (-not (Test-Path $RuntimeExe) -or -not (Test-Path $RuntimePost) -or -not (Test-Path $RuntimeFFmpeg)) {
@@ -42,7 +66,7 @@ if (-not (Test-Path $RuntimeExe) -or -not (Test-Path $RuntimePost) -or -not (Tes
     Write-Host "Run scripts\bundle_windows_runtime.ps1 on Windows first."
     exit 1
 }
-npm run dist:win
+& $Npm run dist:win
 
 Write-Host "==> Ready!"
 Write-Host "Installer created at: windows\dist-installer\OzDownloader-Installer.exe"
