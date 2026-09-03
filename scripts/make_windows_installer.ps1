@@ -7,6 +7,20 @@ $WinDir = Join-Path $Root "windows"
 
 Set-Location $WinDir
 
+function Require-Command([string]$Name, [string]$Hint) {
+    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
+        Write-Host "ERROR: '$Name' was not found on PATH."
+        Write-Host $Hint
+        exit 1
+    }
+}
+
+Require-Command "npm" @"
+Install Node.js LTS from https://nodejs.org (includes npm), then open a NEW PowerShell
+window and re-run:
+  powershell -ExecutionPolicy Bypass -File .\scripts\make_windows_installer.ps1
+"@
+
 Write-Host "==> Bundling Windows embedded runtime if missing"
 $RuntimeDir = Join-Path $WinDir "resources\runtime"
 $RuntimeExe = Join-Path $RuntimeDir "python.exe"

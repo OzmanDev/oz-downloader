@@ -35,8 +35,10 @@ if (-not (Test-Path $PyExe)) {
 }
 
 Write-Host "==> Installing Python dependencies (zotify, mutagen, requests, imageio-ffmpeg)"
-& $PyExe -m pip install --upgrade pip wheel
-& $PyExe -m pip install mutagen requests imageio-ffmpeg
+& $PyExe -m pip install --upgrade pip wheel setuptools
+# music-tag (hyphen) provides the music_tag module; installing it first avoids a
+# broken "music_tag" sdist wheel name during zotify's dependency install.
+& $PyExe -m pip install "music-tag" mutagen requests imageio-ffmpeg
 & $PyExe -m pip install "git+https://github.com/Googolplexed0/zotify.git"
 
 Write-Host "==> Extracting ffmpeg.exe"
@@ -44,26 +46,45 @@ $FFmpegScript = "import imageio_ffmpeg, shutil, os; shutil.copy(imageio_ffmpeg.g
 & $PyExe -c $FFmpegScript
 
 Write-Host "==> Copying postprocess script"
-$ZotifyTools = if ($env:ZOTIFY_TOOLS) { $env:ZOTIFY_TOOLS } else { Join-Path (Split-Path -Parent $Root) "zotify-tools" }
-if (-not (Test-Path $ZotifyTools)) {
-    $ZotifyTools = Join-Path $env:USERPROFILE "Desktop\zotify-tools"
+$PostProcessSource = $null
+$Candidates = @(
+    (Join-Path $Root "scripts\zotify-postprocess.py"),
+    (Join-Path $Root "scripts\zotify-postprocess")
+)
+if ($env:ZOTIFY_TOOLS) {
+    $Candidates += (Join-Path $env:ZOTIFY_TOOLS "bin\zotify-postprocess")
 }
-$PostProcessSource = Join-Path $ZotifyTools "bin\zotify-postprocess"
-if (Test-Path $PostProcessSource) {
-    Copy-Item $PostProcessSource (Join-Path $RuntimeDir "zotify-postprocess.py")
-} else {
-    Write-Host "ERROR: missing $PostProcessSource"
+$Candidates += (Join-Path (Split-Path -Parent $Root) "zotify-tools\bin\zotify-postprocess")
+$Candidates += (Join-Path $env:USERPROFILE "Desktop\zotify-tools\bin\zotify-postprocess")
+
+foreach ($c in $Candidates) {
+    if (Test-Path $c) { $PostProcessSource = $c; break }
+}
+if (-not $PostProcessSource) {
+    Write-Host "ERROR: missing zotify-postprocess.py"
+    Write-Host "Expected one of:"
+    $Candidates | ForEach-Object { Write-Host "  $_" }
     exit 1
 }
+Copy-Item $PostProcessSource (Join-Path $RuntimeDir "zotify-postprocess.py") -Force
+Write-Host "    from $PostProcessSource"
 
-if (Test-Path (Join-Path $ZotifyTools "scripts\patch_oauth.py")) {
+$PatchOAuth = Join-Path $Root "scripts\patch_oauth.py"
+if (-not (Test-Path $PatchOAuth) -and $env:ZOTIFY_TOOLS) {
+    $PatchOAuth = Join-Path $env:ZOTIFY_TOOLS "scripts\patch_oauth.py"
+}
+if (Test-Path $PatchOAuth) {
     Write-Host "==> Applying OAuth patch"
-    & $PyExe (Join-Path $ZotifyTools "scripts\patch_oauth.py")
+    & $PyExe $PatchOAuth
 }
 
-if (Test-Path (Join-Path $ZotifyTools "scripts\patch_skip_existing.py")) {
+$PatchSkip = Join-Path $Root "scripts\patch_skip_existing.py"
+if (-not (Test-Path $PatchSkip) -and $env:ZOTIFY_TOOLS) {
+    $PatchSkip = Join-Path $env:ZOTIFY_TOOLS "scripts\patch_skip_existing.py"
+}
+if (Test-Path $PatchSkip) {
     Write-Host "==> Applying skip-existing patch"
-    & $PyExe (Join-Path $ZotifyTools "scripts\patch_skip_existing.py")
+    & $PyExe $PatchSkip
 }
 
 @'

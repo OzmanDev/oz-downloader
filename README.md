@@ -73,17 +73,22 @@ Creates:
 
 **Important:** The Windows installer must be built **on a Windows PC** so Python, zotify, and ffmpeg can be bundled inside the app (same as the Mac DMG).
 
+**Prerequisites on Windows:**
+1. **Node.js LTS** from https://nodejs.org (must provide `npm` on PATH)
+2. Git (for cloning zotify during the runtime bundle)
+3. Open a **new** PowerShell after installing Node
+
 On Windows (PowerShell):
 
 ```powershell
-cd ZotifyStudio
+cd oz-downloader   # or oz-downloader-main\oz-downloader-main
 powershell -ExecutionPolicy Bypass -File .\scripts\make_windows_installer.ps1
 ```
 
 Or step by step:
 
 ```powershell
-# 1. Bundle Python + zotify + ffmpeg (requires ~/Desktop/zotify-tools)
+# 1. Bundle Python + zotify + ffmpeg (postprocess script is now in this repo)
 powershell -ExecutionPolicy Bypass -File .\scripts\bundle_windows_runtime.ps1
 
 # 2. Build installer
@@ -96,6 +101,8 @@ Creates:
 - `windows/dist-installer/OzDownloader-Installer.exe`
 
 Copy to Desktop or share with users. Without the bundled runtime, link preview may work but **downloads will not**.
+
+No separate `Desktop\zotify-tools` folder is required anymore.
 
 ---
 
