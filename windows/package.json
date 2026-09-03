@@ -1,6 +1,6 @@
 {
   "name": "oz-downloader",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Native desktop app for downloading Spotify playlists, albums, and tracks.",
   "main": "dist-electron/main.js",
   "scripts": {

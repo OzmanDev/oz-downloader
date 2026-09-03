@@ -8,6 +8,7 @@ export interface ElectronAPI {
   writeFile: (path: string, content: string) => Promise<boolean>;
   deleteFile: (path: string) => Promise<boolean>;
   exists: (path: string) => Promise<boolean>;
+  folderHasOgg: (dirPath: string) => Promise<boolean>;
   saveBase64Image: (path: string, base64: string) => Promise<boolean>;
   loadLocalTrackIds: (rootPath: string) => Promise<string[]>;
   chooseDirectory: () => Promise<string | null>;
@@ -30,6 +31,7 @@ const api: ElectronAPI = {
   writeFile: (p, c) => ipcRenderer.invoke('fs:writeFile', p, c),
   deleteFile: (p) => ipcRenderer.invoke('fs:deleteFile', p),
   exists: (p) => ipcRenderer.invoke('fs:exists', p),
+  folderHasOgg: (p) => ipcRenderer.invoke('fs:folderHasOgg', p),
   saveBase64Image: (p, b) => ipcRenderer.invoke('fs:saveBase64Image', p, b),
   loadLocalTrackIds: (r) => ipcRenderer.invoke('fs:loadLocalTrackIds', r),
   chooseDirectory: () => ipcRenderer.invoke('dialog:chooseDirectory'),

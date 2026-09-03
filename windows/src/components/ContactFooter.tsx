@@ -27,7 +27,7 @@ export const ContactFooter: React.FC = () => {
 
   return (
     <footer className="h-9 px-4 flex items-center justify-between bg-[#2c2c2e]/40 border-t border-white/5 text-xs text-neutral-400 select-none">
-      <div>Oz Downloader v0.1.0 · made with ❤️ by Oz</div>
+      <div>Oz Downloader v0.2.0 · made with ❤️ by Oz</div>
 
       <div className="flex items-center gap-4">
         <button

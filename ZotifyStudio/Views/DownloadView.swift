@@ -239,7 +239,8 @@ struct DownloadView: View {
                     ProgressView()
                         .controlSize(.small)
                 } else if downloads.isRunning {
-                    if downloads.songItems.allSatisfy(\.isFinished), !downloads.songItems.isEmpty {
+                    if downloads.isConverting == false,
+                       downloads.downloadPhase == .converting {
                         Text("Preparing convert…")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -387,11 +388,23 @@ struct DownloadView: View {
     private var showsConvertProgress: Bool {
         guard downloads.autoConvertEnabled else { return false }
         if downloads.isConverting || downloads.convertFraction > 0 { return true }
-        guard !downloads.songItems.isEmpty, downloads.songItems.allSatisfy(\.isFinished) else { return false }
-        return downloads.isRunning || downloads.convertSkipped
+        if downloads.convertSkipped
             || downloads.convertLabel.localizedCaseInsensitiveContains("fail")
             || downloads.convertLabel.localizedCaseInsensitiveContains("converted")
             || downloads.convertLabel.localizedCaseInsensitiveContains("no new")
+            || downloads.convertLabel.localizedCaseInsensitiveContains("nothing new")
+            || downloads.convertLabel.localizedCaseInsensitiveContains("no .ogg") {
+            return true
+        }
+        // Don't claim convert while library check / download is still running.
+        switch downloads.downloadPhase {
+        case .checkingExisting, .downloading, .starting, .fetchingTrackInfo, .signingIn, .retrying:
+            return false
+        default:
+            break
+        }
+        guard !downloads.songItems.isEmpty, downloads.songItems.allSatisfy(\.isFinished) else { return false }
+        return downloads.isRunning
     }
 
     private var isPreparingConvert: Bool {
@@ -400,6 +413,8 @@ struct DownloadView: View {
             && !downloads.isConverting
             && downloads.convertFraction <= 0
             && !downloads.convertSkipped
+            && downloads.downloadPhase != .checkingExisting
+            && downloads.downloadPhase != .downloading
     }
 
     private var convertProgressSection: some View {
@@ -582,7 +597,12 @@ struct DownloadView: View {
             if !downloads.songItems.isEmpty,
                downloads.songItems.allSatisfy(\.isFinished),
                downloads.autoConvertEnabled {
-                return "Download done — starting convert…"
+                switch downloads.downloadPhase {
+                case .checkingExisting, .downloading, .starting, .fetchingTrackInfo, .signingIn, .retrying:
+                    break
+                default:
+                    return "Download done — starting convert…"
+                }
             }
             if downloads.queueItems.count > 1,
                let current = downloads.queueItems.first(where: { $0.status == .downloading }) {

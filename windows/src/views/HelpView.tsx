@@ -29,7 +29,7 @@ export const HelpView: React.FC = () => {
     <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6 max-w-2xl">
       <div>
         <h1 className="text-2xl font-bold text-white tracking-tight">Oz Downloader</h1>
-        <div className="text-sm font-medium text-neutral-400 mt-1">v0.1.0</div>
+        <div className="text-sm font-medium text-neutral-400 mt-1">v0.2.0</div>
         <p className="text-sm text-neutral-400 mt-1">
           Download your Spotify playlists to this PC — simply.
         </p>

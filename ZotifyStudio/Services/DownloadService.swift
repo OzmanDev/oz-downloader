@@ -245,6 +245,8 @@ final class DownloadService: ObservableObject {
     private var skipPlaylistFlag = CancellationFlag()
     /// Skip the current song and continue remaining songs.
     private var skipSongFlag = CancellationFlag()
+    /// All Progress rows already resolved from disk — stop zotify early (success).
+    private var libraryCheckComplete = CancellationFlag()
     private var signInCancelFlag = CancellationFlag()
     /// True while zotify printed a Spotify authorize URL and is waiting on the browser.
     private var awaitingSpotifyLogin = CancellationFlag()
@@ -565,6 +567,7 @@ final class DownloadService: ObservableObject {
     ) {
         skipPlaylistFlag.value = false
         skipSongFlag.value = false
+        libraryCheckComplete.value = false
         downloadErrorMessage = ""
         retryStatusMessage = ""
         downloadSpeedLabel = ""
@@ -775,6 +778,7 @@ final class DownloadService: ObservableObject {
         cancelFlag.value = false
         skipPlaylistFlag.value = false
         skipSongFlag.value = false
+        libraryCheckComplete.value = false
         awaitingSpotifyLogin.value = false
         reauthHandoff.value = false
         pendingAuthURL = nil
@@ -894,6 +898,7 @@ final class DownloadService: ObservableObject {
 
             skipPlaylistFlag.value = false
             skipSongFlag.value = false
+            libraryCheckComplete.value = false
             beginQueueItem(at: idx)
             capturePreexistingDiskState(root: root, playlistName: item.name)
             appendLog("")
@@ -983,18 +988,24 @@ final class DownloadService: ObservableObject {
                     finishAllSongsForConvert()
                     markDuplicateTracksAsSkipped()
                     refreshTotalProgressFromSongs()
-                    let shouldConvert = autoPP
+                    var shouldConvert = autoPP
                         && format != "none"
                         && format != "ogg"
                         && !flag.value
                         && !skipPlaylistFlag.value
-                    let newlyDownloaded = songItems.contains { $0.status == .done }
-                    let hasConvertibleOnDisk = Self.playlistHasConvertibleSource(
-                        root: root,
-                        playlistName: item.name
-                    )
-                    // Always attempt convert after a successful download when enabled —
-                    // gate used to skip when songs were “already saved” even if .ogg still needed FLAC.
+                    // Convert only when leftover .ogg remains — even if songs were
+                    // already downloaded / marked “Already here”.
+                    if shouldConvert {
+                        let hasOggOnDisk = Self.playlistHasConvertibleSource(
+                            root: root,
+                            playlistName: item.name
+                        )
+                        if !hasOggOnDisk {
+                            shouldConvert = false
+                            finishConvertNothingToDo()
+                            appendLog("Convert skipped — no .ogg files to convert.")
+                        }
+                    }
                     if shouldConvert {
                         guard let post else {
                             appendLog("Post-process tool missing (zotify-postprocess) — left files as downloaded.")
@@ -1042,7 +1053,7 @@ final class DownloadService: ObservableObject {
                         if !flag.value, !skipPlaylistFlag.value {
                             switch convertOutcome {
                             case .nothingToConvert:
-                                showToast("No new/changed download folders found to convert.", duration: 4)
+                                showToast("No .ogg files left to convert.", duration: 4)
                             case .failed:
                                 downloadHadError = true
                                 downloadErrorMessage = "Download finished, but converting / tagging failed."
@@ -1704,12 +1715,13 @@ final class DownloadService: ObservableObject {
                         },
                         isCancelled: {
                             flag.value || self.skipPlaylistFlag.value || self.skipSongFlag.value
-                                || self.reauthHandoff.value
+                                || self.reauthHandoff.value || self.libraryCheckComplete.value
                         },
                         stallTimeout: 75,
                         stallHeartbeat: {
                             // Don't kill while handing off to polished OAuth.
                             if self.awaitingSpotifyLogin.value || self.reauthHandoff.value { return true }
+                            if self.libraryCheckComplete.value { return false }
                             if fileCountBox.bumped {
                                 fileCountBox.bumped = false
                                 return true
@@ -1719,7 +1731,10 @@ final class DownloadService: ObservableObject {
                     )
                     output = result.output
                     ZotifyCLI.scrubLogFiles(in: root)
-                    if self.skipPlaylistFlag.value || self.skipSongFlag.value {
+                    if self.libraryCheckComplete.value {
+                        succeeded = true
+                        errorText = ""
+                    } else if self.skipPlaylistFlag.value || self.skipSongFlag.value {
                         succeeded = false
                         errorText = self.skipPlaylistFlag.value ? "Cancelled" : "Song skipped"
                     } else if result.exitCode == 124 || output.contains("download stalled") {
@@ -1838,18 +1853,11 @@ final class DownloadService: ObservableObject {
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// True when playlist folder (or flat music root) still has unconverted source audio (.ogg, etc.).
+    /// True when playlist folder still has leftover `.ogg` to convert to FLAC.
     nonisolated static func playlistHasConvertibleSource(root: String, playlistName: String) -> Bool {
-        let sourceExts: Set<String> = ["ogg", "mp3", "m4a", "aac", "opus", "wav"]
-        let rootURL = URL(fileURLWithPath: root)
-        var folders = [rootURL]
-        let clean = sanitizePlaylistFolderName(playlistName)
-        if !clean.isEmpty {
-            folders.insert(rootURL.appendingPathComponent(clean, isDirectory: true), at: 0)
-        }
-        for folder in folders {
-            let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
-            if names.contains(where: { sourceExts.contains(($0 as NSString).pathExtension.lowercased()) }) {
+        for path in playlistScanPaths(root: root, playlistName: playlistName) {
+            let names = (try? FileManager.default.contentsOfDirectory(atPath: path)) ?? []
+            if names.contains(where: { ($0 as NSString).pathExtension.lowercased() == "ogg" }) {
                 return true
             }
         }
@@ -1978,6 +1986,27 @@ final class DownloadService: ObservableObject {
         if downloadPhase == .starting || downloadPhase == .fetchingTrackInfo || statusMessage.isEmpty {
             setPhase(.checkingExisting)
         }
+        maybeShortCircuitLibraryCheck()
+    }
+
+    /// When every Progress row is already Done/Skipped, stop zotify instead of
+    /// slowly re-checking hundreds of tracks and then re-running convert.
+    private func maybeShortCircuitLibraryCheck() {
+        guard isRunning, !libraryCheckComplete.value else { return }
+        guard !cancelFlag.value, !skipPlaylistFlag.value else { return }
+        switch downloadPhase {
+        case .checkingExisting, .downloading, .starting:
+            break
+        default:
+            return
+        }
+        guard !songItems.isEmpty else { return }
+        let expected = max(totalExpected, songItems.count)
+        guard songItems.count >= expected, songItems.allSatisfy(\.isFinished) else { return }
+        libraryCheckComplete.value = true
+        downloadSpeedLabel = "All songs already on disk"
+        appendLog("Library check complete — \(songItems.count) songs already resolved. Stopping download early.")
+        killOrphanZotifyProcessesAsync(source: "libraryComplete")
     }
 
     /// Files older than this job → Already saved; new/changed files → Done.
@@ -2407,20 +2436,21 @@ final class DownloadService: ObservableObject {
         convertFraction = 1
         isConverting = false
         convertSkipped = true
-        convertLabel = "No new/changed folders to convert"
+        convertLabel = "No .ogg files to convert"
         if songItems.contains(where: { $0.status == .failed }) {
             statusMessage = "Finished with errors"
         } else {
             statusMessage = "Done"
         }
-        appendLog("No new/changed download folders found to convert.")
+        appendLog("No .ogg files found to convert.")
     }
 
     private func handleConvertLine(_ line: String) {
         appendLog(line)
         let lower = line.lowercased()
-        if lower.contains("no new/changed") || lower.contains("nothing to convert") {
-            convertLabel = "No new/changed folders to convert"
+        if lower.contains("no new/changed") || lower.contains("nothing to convert")
+            || lower.contains("no .ogg") {
+            convertLabel = "No .ogg files to convert"
             convertSkipped = true
             if !songItems.contains(where: { $0.status == .failed }) {
                 statusMessage = "Done"
@@ -2516,6 +2546,7 @@ final class DownloadService: ObservableObject {
         activeSongIndex = nil
         markNextDownloading()
         refreshTotalProgressFromSongs()
+        maybeShortCircuitLibraryCheck()
     }
 
     /// After a whole-playlist zotify run, sync Progress from disk — never invent success.
@@ -2873,20 +2904,13 @@ final class DownloadService: ObservableObject {
         onLine: @escaping (String) -> Void
     ) -> PostprocessOutcome {
         let rootURL = URL(fileURLWithPath: root)
-        let sourceExts: Set<String> = ["ogg", "mp3", "m4a", "aac", "opus", "wav"]
-        let postprocessExts = sourceExts.union(["flac"])
+        // Convert gate is .ogg-only — don't re-tag FLAC-only folders.
+        let sourceExts: Set<String> = ["ogg"]
 
-        func folderHasSourceAudio(_ url: URL) -> Bool {
+        func folderHasOgg(_ url: URL) -> Bool {
             let names = (try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []
-            return names.contains { sourceExts.contains(($0 as NSString).pathExtension.lowercased()) }
+            return names.contains { ($0 as NSString).pathExtension.lowercased() == "ogg" }
         }
-
-        func folderNeedsPostprocess(_ url: URL) -> Bool {
-            let names = (try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []
-            return names.contains { postprocessExts.contains(($0 as NSString).pathExtension.lowercased()) }
-        }
-
-        let folderQualifies = playlistNames.isEmpty ? folderHasSourceAudio : folderNeedsPostprocess
 
         var targets: [URL] = []
         for name in playlistNames {
@@ -2895,12 +2919,12 @@ final class DownloadService: ObservableObject {
             // Prefer the same scan paths used for Progress / skip-existing (handles Unicode forms).
             for path in playlistScanPaths(root: root, playlistName: name) {
                 let url = URL(fileURLWithPath: path, isDirectory: true)
-                if folderQualifies(url), !targets.contains(where: { $0.path == url.path }) {
+                if folderHasOgg(url), !targets.contains(where: { $0.path == url.path }) {
                     targets.append(url)
                 }
             }
             let exact = rootURL.appendingPathComponent(trimmed, isDirectory: true)
-            if folderQualifies(exact), !targets.contains(where: { $0.path == exact.path }) {
+            if folderHasOgg(exact), !targets.contains(where: { $0.path == exact.path }) {
                 targets.append(exact)
                 continue
             }
@@ -2911,18 +2935,17 @@ final class DownloadService: ObservableObject {
             ) {
                 let match = dirs.first { dir in
                     dir.lastPathComponent.localizedCaseInsensitiveCompare(trimmed) == .orderedSame
-                        && folderQualifies(dir)
+                        && folderHasOgg(dir)
                 }
                 if let match, !targets.contains(where: { $0.path == match.path }) {
                     targets.append(match)
                     continue
                 }
             }
-            // Rescue flat downloads: move root-level source audio into the playlist folder.
-            if folderHasSourceAudio(rootURL) {
+            // Rescue flat downloads: move root-level .ogg into the playlist folder.
+            if folderHasOgg(rootURL) {
                 try? FileManager.default.createDirectory(at: exact, withIntermediateDirectories: true)
                 let names = (try? FileManager.default.contentsOfDirectory(atPath: rootURL.path)) ?? []
-                var moved = 0
                 for fileName in names {
                     let ext = (fileName as NSString).pathExtension.lowercased()
                     guard sourceExts.contains(ext) else { continue }
@@ -2933,17 +2956,15 @@ final class DownloadService: ObservableObject {
                     if FileManager.default.fileExists(atPath: dest.path) { continue }
                     do {
                         try FileManager.default.moveItem(at: src, to: dest)
-                        moved += 1
                     } catch {
                         continue
                     }
                 }
-                if folderQualifies(exact), !targets.contains(where: { $0.path == exact.path }) {
+                if folderHasOgg(exact), !targets.contains(where: { $0.path == exact.path }) {
                     targets.append(exact)
                 }
             }
-            // Always post-process the playlist folder after a download when it has audio.
-            if folderNeedsPostprocess(exact), !targets.contains(where: { $0.path == exact.path }) {
+            if folderHasOgg(exact), !targets.contains(where: { $0.path == exact.path }) {
                 targets.append(exact)
             }
         }
@@ -2968,11 +2989,10 @@ final class DownloadService: ObservableObject {
                 return mod > since
             }
 
-            targets = recent.filter { folderHasSourceAudio($0) }
+            targets = recent.filter { folderHasOgg($0) }
         }
 
-        // Also pick up any older folders that still have unconverted source audio
-        // from previous downloads (e.g. convert was skipped or failed last time).
+        // Also pick up any older folders that still have leftover .ogg.
         if let allFolders = try? FileManager.default.contentsOfDirectory(
             at: rootURL,
             includingPropertiesForKeys: [.isDirectoryKey],
@@ -2984,14 +3004,14 @@ final class DownloadService: ObservableObject {
                 guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDir),
                       isDir.boolValue,
                       !targetPaths.contains(folder.path),
-                      folderHasSourceAudio(folder)
+                      folderHasOgg(folder)
                 else { continue }
                 targets.append(folder)
             }
         }
 
         if targets.isEmpty {
-            onLine("No new/changed download folders found to convert.")
+            onLine("No .ogg files found to convert.")
             return .nothingToConvert
         }
 

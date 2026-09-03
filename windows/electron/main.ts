@@ -181,6 +181,16 @@ ipcMain.handle('fs:deleteFile', async (_, filePath: string) => {
 
 ipcMain.handle('fs:exists', (_, filePath: string) => fs.existsSync(filePath));
 
+ipcMain.handle('fs:folderHasOgg', async (_, dirPath: string) => {
+  try {
+    if (!dirPath || !fs.existsSync(dirPath)) return false;
+    const names = await fs.promises.readdir(dirPath);
+    return names.some((n) => n.toLowerCase().endsWith('.ogg'));
+  } catch {
+    return false;
+  }
+});
+
 ipcMain.handle('fs:saveBase64Image', async (_, filePath: string, base64Data: string) => {
   try {
     const buffer = Buffer.from(base64Data.replace(/^data:image\/\w+;base64,/, ''), 'base64');

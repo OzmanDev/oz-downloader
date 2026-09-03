@@ -1,6 +1,6 @@
 # Oz Downloader — End-to-End Test Plan
 
-Manual E2E checklist for **v0.1.0**. Run against a fresh install from `OzDownloader-Installer.dmg` when possible, and again after major download/convert changes.
+Manual E2E checklist for **v0.2.0**. Run against a fresh install from `OzDownloader-Installer.dmg` when possible, and again after major download/convert changes.
 
 **Pass criteria:** each case ends in the expected UI state **and** the expected files on disk. Note macOS version + Apple Silicon/Intel on the report.
 

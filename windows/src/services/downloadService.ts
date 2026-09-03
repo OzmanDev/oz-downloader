@@ -341,7 +341,11 @@ class DownloadServiceState {
     if (this.isCancelled) return false;
 
     if (res.exitCode === 0) {
-      if (appStore.settings.autoPostprocess && appStore.settings.convertFormat !== 'none') {
+      if (
+        appStore.settings.autoPostprocess &&
+        appStore.settings.convertFormat !== 'none' &&
+        appStore.settings.convertFormat.toLowerCase() !== 'ogg'
+      ) {
         await this.runPostprocess(item.name);
       }
       return true;
@@ -496,10 +500,27 @@ class DownloadServiceState {
   }
 
   private async runPostprocess(playlistName: string) {
+    const paths = await getAppPaths();
+    const format = appStore.settings.convertFormat;
+    const rootPath = appStore.settings.rootPath;
+    const folderPath = `${rootPath.replace(/[/\\]+$/, '')}/${playlistName.replace(/[/\\?%*:|"<>]/g, '_')}`;
+
+    const api = (window as any).electronAPI;
+    const hasOgg = api?.folderHasOgg ? await api.folderHasOgg(folderPath) : true;
+    if (!hasOgg) {
+      this.convertSkipped = true;
+      this.convertFraction = 1;
+      this.convertLabel = 'No .ogg files to convert';
+      this.isConverting = false;
+      this.setPhase('idle');
+      this.statusMessage = 'Done';
+      this.notify();
+      return;
+    }
+
     this.isConverting = true;
     this.convertSkipped = false;
     this.convertFraction = 0.05;
-    const format = appStore.settings.convertFormat;
     const fmt = format.toUpperCase();
     this.convertLabel =
       fmt === 'FLAC' || format.toLowerCase() === 'flac'
@@ -508,11 +529,7 @@ class DownloadServiceState {
     this.setPhase('converting');
     this.notify();
 
-    const paths = await getAppPaths();
     const genre = appStore.settings.defaultGenre || '';
-    const rootPath = appStore.settings.rootPath;
-    const folderPath = `${rootPath.replace(/[/\\]+$/, '')}/${playlistName.replace(/[/\\?%*:|"<>]/g, '_')}`;
-
     const postprocessPy = `${paths.bundledRuntimeDir}/zotify-postprocess.py`;
     const args = [postprocessPy, folderPath, '--format', format];
     if (genre) {
