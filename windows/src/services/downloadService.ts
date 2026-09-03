@@ -1,6 +1,7 @@
 import {
   SongDownloadItem,
   DownloadQueueItem,
+  DownloadPhase,
 } from '../types/downloads';
 import { DownloadTabBadge, FetchedPlaylist } from '../types/models';
 import { appStore } from './appStore';
@@ -21,6 +22,11 @@ class DownloadServiceState {
   totalExpected: number = 0;
   totalCompleted: number = 0;
   downloadRate: string = '';
+  downloadPhase: DownloadPhase = 'idle';
+  convertFraction: number = 0;
+  convertLabel: string = '';
+  convertSkipped: boolean = false;
+  showProgressDetails: boolean = true;
   tabBadge: DownloadTabBadge = 'none';
   toastMessage: string = '';
   toastVisible: boolean = false;
@@ -30,6 +36,7 @@ class DownloadServiceState {
 
   private currentJobId: string | null = null;
   private isCancelled: boolean = false;
+  private activeSongIndex: number | null = null;
   private listeners = new Set<Listener>();
   private toastTimer: any = null;
 
@@ -40,6 +47,93 @@ class DownloadServiceState {
 
   private notify() {
     this.listeners.forEach((fn) => fn());
+  }
+
+  get phaseStatusLabel(): string {
+    const playlist = this.queueItems[this.currentQueueIndex]?.name ?? '';
+    switch (this.downloadPhase) {
+      case 'idle':
+        return this.statusMessage || '';
+      case 'starting':
+        return playlist ? `Starting ${playlist}…` : 'Starting…';
+      case 'fetchingTrackInfo':
+        return 'Fetching track list…';
+      case 'checkingExisting':
+        return 'Checking library…';
+      case 'downloading': {
+        const newCount = this.songItems.filter(
+          (s) =>
+            s.status === 'pending' ||
+            s.status === 'downloading' ||
+            s.status === 'done' ||
+            s.status === 'failed'
+        ).length;
+        if (newCount > 0) {
+          return newCount === 1
+            ? 'Downloading 1 new song…'
+            : `Downloading ${newCount} new songs…`;
+        }
+        return playlist ? `Downloading ${playlist}…` : 'Downloading…';
+      }
+      case 'converting':
+        return this.convertLabel || 'Converting…';
+      case 'signingIn':
+        return 'Sign in with Spotify…';
+      case 'retrying':
+        return playlist ? `Retrying ${playlist}…` : 'Retrying…';
+      case 'stopping':
+        return 'Cancelling…';
+      default:
+        return this.statusMessage || '';
+    }
+  }
+
+  get phaseProgressSummary(): string {
+    const skipped = this.songItems.filter((s) => s.status === 'skipped').length;
+    const left = this.songItems.filter(
+      (s) => s.status === 'pending' || s.status === 'downloading' || s.status === 'failed'
+    ).length;
+    switch (this.downloadPhase) {
+      case 'idle':
+        return '';
+      case 'starting':
+        return 'Getting ready…';
+      case 'fetchingTrackInfo':
+        return 'Loading song titles from Spotify…';
+      case 'checkingExisting':
+        if (skipped > 0 || left > 0) return `${skipped} skipped · ${left} left`;
+        return 'Checking which songs you already have.';
+      case 'downloading':
+        return `${skipped} skipped · ${left} left`;
+      case 'converting':
+        return this.convertLabel || 'Converting downloaded files to FLAC, embedding lyrics, and renaming…';
+      case 'signingIn':
+        return 'Complete Spotify sign-in in your browser, then this will continue.';
+      case 'retrying':
+        return 'Connection issue — retrying…';
+      case 'stopping':
+        return 'Stopping…';
+      default:
+        return '';
+    }
+  }
+
+  get totalFraction(): number {
+    if (this.isConverting || this.downloadPhase === 'converting') {
+      return Math.min(1, Math.max(0.05, this.convertFraction));
+    }
+    const expected = Math.max(this.totalExpected, this.songItems.length, 1);
+    const finished = this.songItems.filter((s) =>
+      s.status === 'done' || s.status === 'skipped'
+    ).length;
+    return Math.min(1, finished / expected);
+  }
+
+  private setPhase(phase: DownloadPhase) {
+    this.downloadPhase = phase;
+    if (phase !== 'idle') {
+      this.statusMessage = this.phaseStatusLabel;
+    }
   }
 
   showToast(message: string, durationMs = 3200) {
@@ -61,8 +155,14 @@ class DownloadServiceState {
     }
   }
 
+  toggleProgressDetails() {
+    this.showProgressDetails = !this.showProgressDetails;
+    this.notify();
+  }
+
   async cancel() {
     this.isCancelled = true;
+    this.setPhase('stopping');
     this.statusMessage = 'Stopping…';
     this.tabBadge = 'none';
     this.notify();
@@ -73,8 +173,12 @@ class DownloadServiceState {
 
     this.isRunning = false;
     this.isConverting = false;
+    this.convertSkipped = true;
+    this.convertFraction = Math.max(this.convertFraction, 1);
+    this.convertLabel = this.convertLabel || 'Convert skipped';
+    this.downloadPhase = 'idle';
     this.statusMessage = 'Download cancelled.';
-    this.showToast('Download cancelled');
+    this.showToast('Cancelled');
     this.notify();
   }
 
@@ -107,7 +211,6 @@ class DownloadServiceState {
     }
 
     if (this.isRunning) {
-      // Append to queue
       this.queueItems.push(...items);
       this.showToast(`Added ${items.length} ${items.length === 1 ? 'item' : 'items'} to queue`);
       this.notify();
@@ -120,8 +223,13 @@ class DownloadServiceState {
     this.isCancelled = false;
     this.downloadErrorMessage = '';
     this.showCelebration = false;
+    this.convertFraction = 0;
+    this.convertLabel = '';
+    this.convertSkipped = false;
+    this.showProgressDetails = true;
     this.tabBadge = 'inProgress';
     this.requestShowGetMusic = true;
+    this.setPhase('starting');
     this.notify();
 
     try {
@@ -149,30 +257,71 @@ class DownloadServiceState {
       }
 
       if (!this.isCancelled) {
-        const anyFailed = this.queueItems.some((q) => q.status === 'failed');
+        const anyFailed =
+          this.queueItems.some((q) => q.status === 'failed') ||
+          this.songItems.some((s) => s.status === 'failed');
         if (anyFailed) {
           this.tabBadge = 'failure';
-          this.statusMessage = 'Some downloads had errors.';
+          this.statusMessage = 'Finished with errors';
+          this.downloadPhase = 'idle';
         } else {
           this.tabBadge = 'success';
-          this.statusMessage = 'All downloads completed!';
+          this.statusMessage = 'Done';
+          this.downloadPhase = 'idle';
           this.showCelebration = true;
-          this.showToast('All downloads completed!');
+          this.showFinishToast();
         }
       }
     } finally {
       this.isRunning = false;
       this.isConverting = false;
       this.currentJobId = null;
+      if (this.downloadPhase !== 'idle') this.downloadPhase = 'idle';
       this.notify();
     }
+  }
+
+  private showFinishToast() {
+    const newCount = this.songItems.filter((s) => s.status === 'done').length;
+    const alreadyHere = this.songItems.filter(
+      (s) => s.status === 'skipped' && s.skipReason === 'alreadySaved'
+    ).length;
+    if (this.songItems.length === 0) {
+      this.showToast('All downloads completed!');
+      return;
+    }
+    if (newCount === 0) {
+      this.showToast('All already here');
+    } else if (alreadyHere > 0) {
+      this.showToast(`${newCount} new · ${alreadyHere} already here`);
+    } else {
+      this.showToast(`${newCount} new`);
+    }
+  }
+
+  private seedPendingSongs(count: number) {
+    if (count <= 0 || this.songItems.length > 0) return;
+    this.songItems = Array.from({ length: count }, (_, i) => ({
+      id: i + 1,
+      number: i + 1,
+      name: `Song ${i + 1}`,
+      status: 'pending' as const,
+      fraction: 0,
+      trackId: '',
+      skipReason: 'none' as const,
+    }));
+    this.totalExpected = Math.max(this.totalExpected, count);
   }
 
   private async processQueueItem(item: DownloadQueueItem): Promise<boolean> {
     this.songItems = [];
     this.totalExpected = item.trackCount || 0;
     this.totalCompleted = 0;
-    this.statusMessage = `Downloading ${item.name}…`;
+    this.activeSongIndex = null;
+    this.downloadRate = '';
+    this.seedPendingSongs(item.trackCount);
+    this.setPhase(item.trackCount > 0 ? 'checkingExisting' : 'starting');
+    this.downloadRate = 'Looking for existing songs…';
     this.notify();
 
     const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -202,85 +351,167 @@ class DownloadServiceState {
     }
   }
 
+  private ensureSong(number: number, name?: string): SongDownloadItem {
+    let existing = this.songItems.find((s) => s.number === number);
+    if (!existing) {
+      existing = {
+        id: number,
+        number,
+        name: name || `Song ${number}`,
+        status: 'pending',
+        fraction: 0,
+        trackId: '',
+        skipReason: 'none',
+      };
+      this.songItems.push(existing);
+      this.songItems.sort((a, b) => a.number - b.number);
+    } else if (name && (existing.name.startsWith('Song ') || existing.name.startsWith('Track '))) {
+      existing.name = name;
+    } else if (name && name.length >= existing.name.length) {
+      existing.name = name;
+    }
+    return existing;
+  }
+
+  private promoteToDownloading(song: SongDownloadItem) {
+    if (song.status === 'pending') {
+      song.status = 'downloading';
+    }
+    this.activeSongIndex = this.songItems.findIndex((s) => s.id === song.id);
+    this.setPhase('downloading');
+  }
+
+  private completeActive(
+    status: 'done' | 'skipped' | 'failed',
+    skipReason: SongDownloadItem['skipReason'] = 'none',
+    name?: string
+  ) {
+    let active =
+      (this.activeSongIndex != null ? this.songItems[this.activeSongIndex] : undefined) ||
+      this.songItems.find((s) => s.status === 'downloading') ||
+      this.songItems.find((s) => s.status === 'pending');
+    if (!active) return;
+    if (name) active.name = name;
+    active.status = status;
+    active.fraction = 1;
+    if (status === 'skipped') {
+      active.skipReason = skipReason === 'none' ? 'alreadySaved' : skipReason;
+    }
+    this.totalCompleted = this.songItems.filter(
+      (s) => s.status === 'done' || s.status === 'skipped'
+    ).length;
+    this.activeSongIndex = null;
+    const next = this.songItems.find((s) => s.status === 'pending');
+    this.activeSongIndex = next ? this.songItems.indexOf(next) : null;
+  }
+
   private handleCLIProgressLine(line: string) {
     this.logText += line + '\n';
+    const upper = line.toUpperCase();
 
-    // Parse download speed (e.g. 1.25MB/s, 850kB/s)
     const rateMatch = line.match(/([0-9.]+\s*[kKmMgG]?i?[Bb]\/s)/);
     if (rateMatch) {
       this.downloadRate = rateMatch[1];
+      this.setPhase('downloading');
+      const active =
+        (this.activeSongIndex != null ? this.songItems[this.activeSongIndex] : undefined) ||
+        this.songItems.find((s) => s.status === 'pending');
+      if (active && active.status === 'pending') {
+        this.promoteToDownloading(active);
+      }
     }
 
-    // Parse song downloading e.g. "Downloading: 45%" or "[1/20] Artist - Song"
     const trackNumMatch = line.match(/\[(\d+)\/(\d+)\]\s+(.+)/);
     if (trackNumMatch) {
       const currentNum = parseInt(trackNumMatch[1], 10);
       const totalNum = parseInt(trackNumMatch[2], 10);
       const songName = trackNumMatch[3].trim();
-
       this.totalExpected = Math.max(this.totalExpected, totalNum);
-      let existing = this.songItems.find((s) => s.number === currentNum);
-      if (!existing) {
-        existing = {
-          id: currentNum,
-          number: currentNum,
-          name: songName,
-          status: 'downloading',
-          fraction: 0,
-          trackId: '',
-          skipReason: 'none',
-        };
-        this.songItems.push(existing);
-      } else {
-        existing.status = 'downloading';
-        existing.name = songName;
+      const song = this.ensureSong(currentNum, songName);
+      // Stay Waiting until real transfer (speed / ≥8% / DOWNLOADED).
+      if (song.status !== 'done' && song.status !== 'skipped' && song.status !== 'failed') {
+        if (song.status === 'downloading') {
+          // keep
+        } else {
+          song.status = 'pending';
+        }
+        this.activeSongIndex = this.songItems.indexOf(song);
       }
-      this.statusMessage = `Song ${currentNum} of ${this.totalExpected}`;
+      if (this.downloadPhase === 'starting' || this.downloadPhase === 'idle') {
+        this.setPhase('checkingExisting');
+      }
       this.notify();
     }
 
-    // Parse percentage
-    const percentMatch = line.match(/(\d+)%/);
+    const percentMatch = line.match(/(\d+(?:\.\d+)?)%/);
     if (percentMatch) {
-      const pct = parseInt(percentMatch[1], 10) / 100;
-      const downloadingItem = this.songItems.find((s) => s.status === 'downloading');
-      if (downloadingItem) {
-        downloadingItem.fraction = pct;
+      const pct = parseFloat(percentMatch[1]) / 100;
+      const idx =
+        this.activeSongIndex != null && this.songItems[this.activeSongIndex]
+          ? this.activeSongIndex
+          : this.songItems.findIndex((s) => s.status === 'downloading' || s.status === 'pending');
+      if (idx >= 0) {
+        const song = this.songItems[idx];
+        if (pct >= 0.08) {
+          this.promoteToDownloading(song);
+        }
+        if (song.status === 'downloading') {
+          song.fraction = Math.min(0.99, Math.max(song.fraction, pct));
+        }
         this.notify();
       }
     }
 
-    // Parse skipped / completed
-    if (line.includes('Skipping') || line.includes('already exists') || line.includes('already on disk')) {
-      const active = this.songItems.find((s) => s.status === 'downloading');
-      if (active) {
-        active.status = 'skipped';
-        active.fraction = 1;
-        active.skipReason = line.includes('duplicate') ? 'duplicate' : 'alreadySaved';
-        this.totalCompleted++;
-        this.notify();
+    if (
+      upper.includes('SKIPPING') ||
+      line.includes('already exists') ||
+      line.includes('already on disk')
+    ) {
+      if (this.downloadPhase !== 'downloading') {
+        this.setPhase('checkingExisting');
       }
-    } else if (line.includes('Downloaded:') || line.includes('Finished:')) {
-      const active = this.songItems.find((s) => s.status === 'downloading');
-      if (active) {
-        active.status = 'done';
-        active.fraction = 1;
-        this.totalCompleted++;
-        this.notify();
+      const skipReason = upper.includes('DUPLICATE') ? 'duplicate' : 'alreadySaved';
+      this.completeActive('skipped', skipReason);
+      this.notify();
+      return;
+    }
+
+    if (upper.includes('DOWNLOADED') || line.includes('Downloaded:') || line.includes('Finished:')) {
+      this.setPhase('downloading');
+      let name: string | undefined;
+      const quoted = line.match(/["']([^"']+)["']/);
+      if (quoted) {
+        const base = quoted[1].replace(/^.*[/\\]/, '').replace(/\.[^.]+$/, '');
+        if (base) name = base;
       }
+      this.completeActive('done', 'none', name);
+      this.notify();
+      return;
+    }
+
+    if (upper.includes('FAILED TO GET CONTENT STREAM')) {
+      this.completeActive('failed');
+      this.notify();
     }
   }
 
   private async runPostprocess(playlistName: string) {
     this.isConverting = true;
-    this.statusMessage = `Converting to ${appStore.settings.convertFormat.toUpperCase()}…`;
+    this.convertSkipped = false;
+    this.convertFraction = 0.05;
+    const format = appStore.settings.convertFormat;
+    const fmt = format.toUpperCase();
+    this.convertLabel =
+      fmt === 'FLAC' || format.toLowerCase() === 'flac'
+        ? 'Converting to FLAC + lyrics…'
+        : `Converting to ${fmt}…`;
+    this.setPhase('converting');
     this.notify();
 
     const paths = await getAppPaths();
-    const format = appStore.settings.convertFormat;
     const genre = appStore.settings.defaultGenre || '';
     const rootPath = appStore.settings.rootPath;
-    const folderPath = `${rootPath.replace(/\/$/, '')}/${playlistName.replace(/[/\\?%*:|"<>]/g, '_')}`;
+    const folderPath = `${rootPath.replace(/[/\\]+$/, '')}/${playlistName.replace(/[/\\?%*:|"<>]/g, '_')}`;
 
     const postprocessPy = `${paths.bundledRuntimeDir}/zotify-postprocess.py`;
     const args = [postprocessPy, folderPath, '--format', format];
@@ -293,9 +524,29 @@ class DownloadServiceState {
         id: `postprocess_${Date.now()}`,
         command: 'python',
         args,
+        onLine: (line) => {
+          const pct = line.match(/(\d+(?:\.\d+)?)%/);
+          if (pct) {
+            this.convertFraction = Math.min(0.99, Math.max(this.convertFraction, parseFloat(pct[1]) / 100));
+          } else if (/lyric/i.test(line)) {
+            this.convertFraction = Math.min(0.95, Math.max(this.convertFraction, 0.7));
+            this.convertLabel = 'Embedding lyrics…';
+          } else if (/renam/i.test(line)) {
+            this.convertFraction = Math.min(0.98, Math.max(this.convertFraction, 0.85));
+            this.convertLabel = 'Renaming songs…';
+          } else if (/convert|flac|ogg|mp3/i.test(line)) {
+            this.convertFraction = Math.min(0.85, Math.max(this.convertFraction, this.convertFraction + 0.05));
+            this.convertLabel = fmt === 'FLAC' ? 'Converting to FLAC…' : `Converting to ${fmt}…`;
+          }
+          this.notify();
+        },
       });
+      this.convertFraction = 1;
+      this.convertLabel = 'Converted · lyrics embedded · renamed';
     } catch (e) {
       console.warn('Postprocess failed:', e);
+      this.convertFraction = 1;
+      this.convertLabel = 'Convert failed';
     }
 
     this.isConverting = false;

@@ -283,18 +283,22 @@ struct DownloadView: View {
                 playlistQueueSection
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(downloads.isConverting ? "Convert" : (downloads.queueItems.count > 1 ? "This playlist" : "Total"))
-                        .font(.subheadline.weight(.medium))
-                    Spacer()
-                    Text(totalProgressLabel)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
+            if showsConvertProgress {
+                convertProgressSection
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(downloads.queueItems.count > 1 ? "This playlist" : "Total")
+                            .font(.subheadline.weight(.medium))
+                        Spacer()
+                        Text(totalProgressLabel)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    ProgressView(value: downloads.totalFraction)
+                        .progressViewStyle(.linear)
                 }
-                ProgressView(value: downloads.totalFraction)
-                    .progressViewStyle(.linear)
             }
 
             Button {
@@ -321,39 +325,19 @@ struct DownloadView: View {
                             .foregroundStyle(.secondary)
                             .padding(.top, 2)
                     } else {
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 10) {
-                                let mainSongs = downloads.songItems.filter { !$0.isDuplicateSkip && $0.skipReason != .alreadySaved }
-                                let duplicates = downloads.songItems.filter(\.isDuplicateSkip)
-                                let alreadySaved = downloads.songItems.filter {
-                                    $0.status == .skipped && $0.skipReason == .alreadySaved
-                                }
-
-                                ForEach(mainSongs) { song in
-                                    songRow(song)
-                                }
-
-                                if !duplicates.isEmpty {
-                                    sectionHeader("Duplicates · skipped (\(duplicates.count))")
-                                    ForEach(duplicates) { song in
-                                        songRow(song)
-                                    }
-                                }
-
-                                if !alreadySaved.isEmpty {
-                                    sectionHeader("Already on disk · skipped (\(alreadySaved.count))")
-                                    ForEach(alreadySaved) { song in
-                                        songRow(song)
-                                    }
-                                }
-
-                                if showsConvertStep {
-                                    convertStepRow
-                                }
-                            }
-                            .padding(.top, 4)
+                        let waiting = downloads.songItems.filter { $0.status == .pending }
+                        let inProgress = downloads.songItems.filter {
+                            $0.status == .downloading || $0.status == .failed
                         }
-                        .frame(minHeight: 140, maxHeight: 280)
+                        let skipped = downloads.songItems.filter { $0.status == .skipped }
+                        let downloaded = downloads.songItems.filter { $0.status == .done }
+
+                        HStack(alignment: .top, spacing: 8) {
+                            progressColumn(title: "Waiting", songs: waiting, accent: .secondary)
+                            progressColumn(title: "In progress", songs: inProgress, accent: .accentColor)
+                            progressColumn(title: "Skipped", songs: skipped, accent: .orange)
+                            progressColumn(title: "Downloaded", songs: downloaded, accent: .green)
+                        }
                     }
                 }
             }
@@ -399,42 +383,74 @@ struct DownloadView: View {
         .padding(.vertical, 4)
     }
 
-    private var showsConvertStep: Bool {
-        // Only show convert once download rows are done or convert is actually running.
-        guard downloads.autoConvertEnabled, !downloads.songItems.isEmpty else { return false }
+    /// True once songs are done and convert is next / active / finished this run.
+    private var showsConvertProgress: Bool {
+        guard downloads.autoConvertEnabled else { return false }
         if downloads.isConverting || downloads.convertFraction > 0 { return true }
-        return downloads.songItems.allSatisfy(\.isFinished) && !downloads.isRunning
+        guard !downloads.songItems.isEmpty, downloads.songItems.allSatisfy(\.isFinished) else { return false }
+        return downloads.isRunning || downloads.convertSkipped
+            || downloads.convertLabel.localizedCaseInsensitiveContains("fail")
+            || downloads.convertLabel.localizedCaseInsensitiveContains("converted")
+            || downloads.convertLabel.localizedCaseInsensitiveContains("no new")
     }
 
-    private var convertStepRow: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("•")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 28, alignment: .trailing)
+    private var isPreparingConvert: Bool {
+        showsConvertProgress
+            && downloads.isRunning
+            && !downloads.isConverting
+            && downloads.convertFraction <= 0
+            && !downloads.convertSkipped
+    }
+
+    private var convertProgressSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.caption.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
-                Text(downloads.convertLabel.isEmpty ? "Converting to FLAC + lyrics…" : downloads.convertLabel)
-                    .font(.subheadline)
-                    .lineLimit(1)
+                Text("Convert")
+                    .font(.subheadline.weight(.medium))
                 Spacer()
                 Text(convertStatusLabel)
-                    .font(.caption2)
+                    .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
+            Text(convertProgressDetail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
             ProgressView(value: convertBarValue)
                 .progressViewStyle(.linear)
                 .tint(convertBarTint)
         }
-        .padding(.top, 2)
+    }
+
+    private var convertProgressDetail: String {
+        if downloads.convertSkipped {
+            return downloads.convertLabel.isEmpty ? "Convert skipped" : downloads.convertLabel
+        }
+        if downloads.convertLabel.localizedCaseInsensitiveContains("fail") {
+            return downloads.convertLabel
+        }
+        if downloads.convertFraction >= 1, !downloads.isConverting {
+            return downloads.convertLabel.isEmpty
+                ? "Converted · lyrics embedded · renamed"
+                : downloads.convertLabel
+        }
+        if downloads.isConverting {
+            return downloads.convertLabel.isEmpty ? "Converting to FLAC + lyrics…" : downloads.convertLabel
+        }
+        if isPreparingConvert {
+            return "Download done — starting convert…"
+        }
+        return downloads.convertLabel.isEmpty ? "Converting to FLAC + lyrics…" : downloads.convertLabel
     }
 
     private var convertBarValue: Double {
         if downloads.isConverting || downloads.convertFraction > 0 {
             return max(0.02, downloads.convertFraction)
         }
+        if isPreparingConvert { return 0.02 }
         if downloads.songItems.allSatisfy(\.isFinished), !downloads.songItems.isEmpty {
             return 0.02
         }
@@ -453,51 +469,9 @@ struct DownloadView: View {
         if downloads.convertLabel.localizedCaseInsensitiveContains("fail") { return "Failed" }
         if downloads.convertFraction >= 1, !downloads.isConverting { return "Done" }
         if downloads.isConverting { return "\(Int(downloads.convertFraction * 100))%" }
+        if isPreparingConvert { return "Starting…" }
         if downloads.songItems.allSatisfy(\.isFinished), !downloads.songItems.isEmpty { return "Waiting" }
         return "—"
-    }
-
-    private func songRow(_ song: SongDownloadItem) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("\(song.number).")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 28, alignment: .trailing)
-                    .monospacedDigit()
-                Text(song.name)
-                    .font(.subheadline)
-                    .lineLimit(1)
-                Spacer()
-                if downloads.isRunning, !song.isFinished {
-                    Button {
-                        downloads.cancelSong(id: song.id)
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Skip this song")
-                }
-                Text(songStatusLabel(song))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            ProgressView(value: songBarValue(song))
-                .progressViewStyle(.linear)
-                .tint(songBarColor(song))
-        }
-    }
-
-    private func songBarValue(_ song: SongDownloadItem) -> Double {
-        if downloads.isConverting, !song.isFinished {
-            return max(0.08, downloads.convertFraction)
-        }
-        switch song.status {
-        case .done, .skipped, .failed: return 1
-        case .downloading: return max(song.fraction, 0.05)
-        case .pending: return 0
-        }
     }
 
     private var playlistQueueSection: some View {
@@ -616,7 +590,7 @@ struct DownloadView: View {
                 let total = downloads.queueItems.count
                 let phaseBit: String
                 switch downloads.downloadPhase {
-                case .checkingExisting: phaseBit = "Checking existing songs"
+                case .checkingExisting: phaseBit = "Checking library"
                 case .downloading: phaseBit = "Downloading new songs"
                 case .fetchingTrackInfo: phaseBit = "Fetching track list"
                 case .signingIn: phaseBit = "Waiting for Spotify sign-in"
@@ -672,6 +646,83 @@ struct DownloadView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private func progressColumn(title: String, songs: [SongDownloadItem], accent: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text("(\(songs.count))")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if songs.isEmpty {
+                Text("None yet")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 2)
+            } else {
+                ForEach(songs) { song in
+                    compactSongRow(song)
+                }
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.primary.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(accent.opacity(0.25), lineWidth: 1)
+                )
+        )
+    }
+
+    private func compactSongRow(_ song: SongDownloadItem) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .top, spacing: 4) {
+                Text("\(song.number).")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                Text(song.name)
+                    .font(.caption)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                if downloads.isRunning,
+                   song.status == .pending || song.status == .downloading {
+                    Button {
+                        downloads.cancelSong(id: song.id)
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Skip this song")
+                }
+            }
+            HStack {
+                Text(songStatusLabel(song))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            if song.status == .downloading || song.status == .failed
+                || song.status == .done || song.status == .skipped {
+                ProgressView(value: songBarValue(song))
+                    .progressViewStyle(.linear)
+                    .tint(songBarColor(song))
+                    .controlSize(.mini)
+            }
+        }
+    }
+
     private func songStatusLabel(_ song: SongDownloadItem) -> String {
         if downloads.isConverting, !song.isFinished {
             return "Converting…"
@@ -679,19 +730,27 @@ struct DownloadView: View {
         switch song.status {
         case .pending: return "Waiting"
         case .downloading:
-            if downloads.downloadPhase == .checkingExisting, song.fraction < 0.08 {
-                return "Checking…"
-            }
-            return "\(Int(song.fraction * 100))%"
-        case .done: return "Done"
+            return "\(Int(max(song.fraction, 0) * 100))%"
+        case .done: return "Downloaded"
         case .skipped:
             switch song.skipReason {
-            case .duplicate: return "Skipped · duplicate"
-            case .alreadySaved: return "Skipped · on disk"
+            case .duplicate: return "Duplicate"
+            case .alreadySaved: return "Already here"
             case .cancelled: return "Cancelled"
             case .none: return "Skipped"
             }
         case .failed: return "Failed"
+        }
+    }
+
+    private func songBarValue(_ song: SongDownloadItem) -> Double {
+        if downloads.isConverting, !song.isFinished {
+            return max(0.08, downloads.convertFraction)
+        }
+        switch song.status {
+        case .done, .skipped, .failed: return 1
+        case .downloading: return max(song.fraction, 0.05)
+        case .pending: return 0
         }
     }
 
@@ -705,6 +764,10 @@ struct DownloadView: View {
         }
     }
 
+    private func songRow(_ song: SongDownloadItem) -> some View {
+        compactSongRow(song)
+    }
+
     private func downloadButtonTitle(for preview: LinkPreview) -> String {
         switch preview.status {
         case .fullyDownloaded: return "Download again"
@@ -716,7 +779,8 @@ struct DownloadView: View {
     private func friendlyStatus(_ raw: String) -> String {
         switch raw.lowercased() {
         case "downloading…", "downloading...": return "Downloading…"
-        case "checking existing songs…", "checking existing songs...": return "Checking existing songs…"
+        case "checking existing songs…", "checking existing songs...",
+             "checking library…", "checking library...": return "Checking library…"
         case "fetching track list…", "fetching track list...",
              "fetching track info…", "fetching track info...": return "Fetching track list…"
         case "converting…", "converting...": return "Converting to FLAC…"

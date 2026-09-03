@@ -15,7 +15,9 @@ export const ToastBanner: React.FC<ToastBannerProps> = ({ message, visible }) =>
     if (msg.includes('failed') || msg.includes('error') || msg.includes('couldn’t') || msg.includes("couldn't")) {
       return AlertTriangle;
     }
-    if (msg.includes('saved') || msg.includes('completed')) return CheckCircle2;
+    if (msg.includes('already here') || msg.includes('saved') || msg.includes('completed') || msg.includes('new ·')) {
+      return CheckCircle2;
+    }
     if (msg.includes('sign')) return UserCheck;
     return ArrowDownCircle;
   };

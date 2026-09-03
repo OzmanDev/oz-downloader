@@ -170,8 +170,17 @@ final class DownloadService: ObservableObject {
         case .fetchingTrackInfo:
             return "Fetching track list…"
         case .checkingExisting:
-            return playlist.isEmpty ? "Checking existing songs…" : "Checking \(playlist)…"
+            return "Checking library…"
         case .downloading:
+            let newCount = songItems.filter {
+                $0.status == .pending || $0.status == .downloading
+                    || $0.status == .done || $0.status == .failed
+            }.count
+            if newCount > 0 {
+                return newCount == 1
+                    ? "Downloading 1 new song…"
+                    : "Downloading \(newCount) new songs…"
+            }
             return playlist.isEmpty ? "Downloading…" : "Downloading \(playlist)…"
         case .converting:
             return convertLabel.isEmpty ? "Converting…" : convertLabel
@@ -188,10 +197,10 @@ final class DownloadService: ObservableObject {
 
     /// One-line Progress summary under the card title.
     var phaseProgressSummary: String {
-        let finished = songItems.filter(\.isFinished).count
-        let expected = max(totalExpected, songItems.count, 0)
-        let skipped = songItems.filter { $0.status == .skipped && $0.skipReason == .alreadySaved }.count
-        let downloaded = songItems.filter { $0.status == .done }.count
+        let skipped = songItems.filter { $0.status == .skipped }.count
+        let left = songItems.filter {
+            $0.status == .pending || $0.status == .downloading || $0.status == .failed
+        }.count
         switch downloadPhase {
         case .idle:
             return ""
@@ -200,21 +209,12 @@ final class DownloadService: ObservableObject {
         case .fetchingTrackInfo:
             return "Loading song titles from Spotify…"
         case .checkingExisting:
-            if expected > 0 {
-                return "Checking which songs you already have (\(finished) of \(expected) found). You can leave this window open."
+            if skipped > 0 || left > 0 {
+                return "\(skipped) skipped · \(left) left"
             }
             return "Checking which songs you already have. You can leave this window open."
         case .downloading:
-            if expected > 0 {
-                var parts: [String] = []
-                if skipped > 0 { parts.append("\(skipped) already on disk") }
-                if downloaded > 0 { parts.append("\(downloaded) new") }
-                let detail = parts.isEmpty
-                    ? "\(finished) of \(expected) saved"
-                    : "\(finished) of \(expected) saved · " + parts.joined(separator: ", ")
-                return "Downloading new songs (\(detail)). You can leave this window open."
-            }
-            return "Downloading new songs. You can leave this window open."
+            return "\(skipped) skipped · \(left) left"
         case .converting:
             return convertLabel.isEmpty
                 ? "Converting downloaded files to FLAC, embedding lyrics, and renaming…"
@@ -1237,6 +1237,17 @@ final class DownloadService: ObservableObject {
                 tabBadge = .success
                 downloadErrorMessage = ""
                 showCelebration = true
+                let newCount = songItems.filter { $0.status == .done }.count
+                let alreadyHere = songItems.filter {
+                    $0.status == .skipped && $0.skipReason == .alreadySaved
+                }.count
+                if !songItems.isEmpty {
+                    if newCount == 0 {
+                        showToast("All already here")
+                    } else if alreadyHere > 0 {
+                        showToast("\(newCount) new · \(alreadyHere) already here")
+                    }
+                }
             } else {
                 downloadHadError = true
                 statusMessage = "Finished with errors"
@@ -1444,8 +1455,7 @@ final class DownloadService: ObservableObject {
 
         if let idx = songItems.firstIndex(where: { !$0.isFinished }) {
             activeSongIndex = idx
-            songItems[idx].status = .downloading
-            songItems[idx].fraction = max(songItems[idx].fraction, 0.02)
+            // Stay .pending until real transfer (speed / ≥8% / DOWNLOADED).
         }
         // Start in "checking" — switch to downloading when bytes/speed appear.
         setPhase(.checkingExisting)
@@ -1597,8 +1607,7 @@ final class DownloadService: ObservableObject {
 
             skipSongFlag.value = false
             activeSongIndex = idx
-            songItems[idx].status = .downloading
-            songItems[idx].fraction = 0.02
+            // Stay in Waiting (.pending) until real transfer progress — no fake 2% bar.
             setPhase(.checkingExisting)
             downloadSpeedLabel = "Looking for existing songs…"
 
@@ -1772,7 +1781,7 @@ final class DownloadService: ObservableObject {
             sessionTrackIds = trackIds
         }
         markDuplicateTracksAsSkipped()
-        // Keep first pending row as downloading after dup marks.
+        // Point at the first waiting song after dup marks (no fake progress).
         if activeSongIndex == nil || (activeSongIndex.map { songItems.indices.contains($0) && songItems[$0].isFinished } ?? false) {
             markNextDownloading()
         }
@@ -1942,13 +1951,10 @@ final class DownloadService: ObservableObject {
         }
         // Match leftover audio (app folder + legacy Zotify Music) by title.
         matchUnmatchedSongsToAudioFiles(files: files, knownRows: rows)
-        let finishedCount = songItems.filter { $0.status == .done || $0.status == .skipped }.count
-        let doneTarget = min(max(finishedCount, 0), songItems.count)
-        if doneTarget < songItems.count,
-           songItems[doneTarget].status == .pending || songItems[doneTarget].status == .downloading {
-            songItems[doneTarget].status = .downloading
-            songItems[doneTarget].fraction = max(songItems[doneTarget].fraction, 0.05)
-            activeSongIndex = doneTarget
+        // Point at the next waiting song without fake “in progress” percent.
+        if activeSongIndex == nil
+            || (activeSongIndex.map { !songItems.indices.contains($0) || songItems[$0].isFinished } ?? true) {
+            activeSongIndex = songItems.firstIndex(where: { $0.status == .pending })
         }
         totalCompleted = songItems.filter { $0.status == .done || $0.status == .skipped }.count
         refreshTotalProgressFromSongs()
@@ -2310,15 +2316,19 @@ final class DownloadService: ObservableObject {
             awaitingSpotifyLogin.value = false
             downloadSpeedLabel = speed
             setPhase(.downloading)
+            if let idx = activeSongIndex, songItems.indices.contains(idx),
+               songItems[idx].status == .pending {
+                songItems[idx].status = .downloading
+            }
         }
         if let pct = Self.extractPercent(line), let idx = activeSongIndex, songItems.indices.contains(idx) {
             awaitingSpotifyLogin.value = false
-            // Tiny % while skipping is common — only treat real progress as downloading.
+            // Tiny % while skipping is common — only treat real transfer as In progress.
             if pct >= 0.08 {
                 setPhase(.downloading)
-            }
-            if songItems[idx].status == .pending {
-                songItems[idx].status = .downloading
+                if songItems[idx].status == .pending {
+                    songItems[idx].status = .downloading
+                }
             }
             if songItems[idx].status == .downloading {
                 songItems[idx].fraction = min(0.99, max(songItems[idx].fraction, pct))
@@ -2332,10 +2342,9 @@ final class DownloadService: ObservableObject {
         }
     }
 
+    /// Point at the next waiting song without fake “in progress” bars.
     private func markNextDownloading() {
         if let idx = songItems.firstIndex(where: { $0.status == .pending }) {
-            songItems[idx].status = .downloading
-            songItems[idx].fraction = 0.02
             activeSongIndex = idx
         } else {
             activeSongIndex = nil

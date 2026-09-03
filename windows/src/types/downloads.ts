@@ -1,6 +1,17 @@
 export type SongStatus = 'pending' | 'downloading' | 'done' | 'skipped' | 'failed';
 export type SkipReason = 'none' | 'duplicate' | 'alreadySaved' | 'cancelled';
 
+export type DownloadPhase =
+  | 'idle'
+  | 'starting'
+  | 'fetchingTrackInfo'
+  | 'checkingExisting'
+  | 'downloading'
+  | 'converting'
+  | 'signingIn'
+  | 'retrying'
+  | 'stopping';
+
 export interface SongDownloadItem {
   id: number;
   number: number;
