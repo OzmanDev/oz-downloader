@@ -1167,6 +1167,9 @@ final class DownloadService: ObservableObject {
         retryStatusMessage = ""
         awaitingSpotifyLogin.value = false
         reauthHandoff.value = false
+        // Spotify often prints FAILED TO GET CONTENT STREAM for tracks that are
+        // already on disk as FLAC — recover those before reporting errors.
+        recoverFailedSongsFromDisk()
         // Final honesty pass: song Progress status + files across app + legacy libraries.
         if let q = queueItems.first(where: { $0.status == .done || $0.status == .failed || $0.status == .downloading })
             ?? queueItems.first {
@@ -1182,6 +1185,16 @@ final class DownloadService: ObservableObject {
             let onDiskUnique = uniqueNames.count
             if failedSongs == 0, statusDone >= totalExpected, totalExpected > 0 {
                 // Every playlist row is accounted for (Done / Already saved / Duplicate).
+                downloadHadError = false
+                downloadErrorMessage = ""
+                totalCompleted = totalExpected
+            } else if failedSongs > 0, onDiskUnique >= totalExpected, totalExpected > 0 {
+                // Files exist for the whole playlist; leftover Failed rows are false alarms.
+                for i in songItems.indices where songItems[i].status == .failed {
+                    songItems[i].status = .skipped
+                    songItems[i].skipReason = .alreadySaved
+                    songItems[i].fraction = 1
+                }
                 downloadHadError = false
                 downloadErrorMessage = ""
                 totalCompleted = totalExpected
@@ -2118,7 +2131,14 @@ final class DownloadService: ObservableObject {
             ? queueItems[currentQueueIndex].name
             : ""
         let root = activeMusicRoot.isEmpty ? AppPaths.defaultMusicRoot.path : activeMusicRoot
-        let scanPaths = Self.playlistScanPaths(root: root, playlistName: playlistName)
+        var scanPaths = Self.playlistScanPaths(root: root, playlistName: playlistName)
+        // Also scan other queue playlist folders — Progress may still show the prior job's songs.
+        for item in queueItems {
+            for path in Self.playlistScanPaths(root: root, playlistName: item.name)
+            where !scanPaths.contains(path) {
+                scanPaths.append(path)
+            }
+        }
         var rows: [SongIdRow] = []
         var files: [URL] = []
         var seen = Set<String>()
@@ -2143,6 +2163,22 @@ final class DownloadService: ObservableObject {
         }
         _ = matchUnmatchedSongsToAudioFiles(files: files, knownRows: rows)
         return songItems[index].status == .done || songItems[index].status == .skipped
+    }
+
+    /// End-of-job pass: reclassify Failed rows that already have audio on disk.
+    private func recoverFailedSongsFromDisk() {
+        let failedIndexes = songItems.indices.filter { songItems[$0].status == .failed }
+        guard !failedIndexes.isEmpty else { return }
+        for i in failedIndexes {
+            _ = recoverSongFromDiskIfPresent(at: i)
+        }
+        let recovered = failedIndexes.filter {
+            songItems[$0].status == .done || songItems[$0].status == .skipped
+        }.count
+        if recovered > 0 {
+            appendLog("Recovered \(recovered) failed song(s) that were already on disk.")
+            refreshTotalProgressFromSongs()
+        }
     }
 
     private nonisolated static func candidateTitleKeys(for name: String) -> [String] {
@@ -2327,14 +2363,17 @@ final class DownloadService: ObservableObject {
         }
         if line.contains("FAILED TO GET CONTENT STREAM") {
             // File may already exist (app folder or legacy Zotify Music) — don't show Failed.
-            if let idx = activeSongIndex, songItems.indices.contains(idx),
+            let idx = activeSongIndex
+                ?? songItems.firstIndex(where: { $0.status == .downloading })
+                ?? songItems.firstIndex(where: { $0.status == .pending })
+            if let idx, songItems.indices.contains(idx),
                recoverSongFromDiskIfPresent(at: idx) {
                 totalCompleted = songItems.filter { $0.status == .done || $0.status == .skipped }.count
                 activeSongIndex = nil
                 markNextDownloading()
                 return
             }
-            let songName = songItems[safe: activeSongIndex ?? -1]?.name ?? "Song"
+            let songName = songItems[safe: idx ?? -1]?.name ?? "Song"
             completeCurrentSong(name: songName, status: .failed)
             return
         }
@@ -2491,37 +2530,66 @@ final class DownloadService: ObservableObject {
         // Never invent phantom "Song N" rows just because we finished one.
         ensureSongCapacity(totalExpected)
 
+        let cleaned = cleanSongName(name)
+        let keys = Set(Self.candidateTitleKeys(for: cleaned))
+        let alreadySavedSkip = status == .skipped
+            && (skipReason == .alreadySaved || skipReason == .none)
+
+        // Duplicate SKIPPING line for a file we already counted — ignore.
+        // (Otherwise the next unfinished track gets falsely marked Already here.)
+        if alreadySavedSkip, !keys.isEmpty,
+           songItems.contains(where: { song in
+               song.isFinished && Self.candidateTitleKeys(for: song.name).contains(where: keys.contains)
+           }) {
+            markNextDownloading()
+            maybeShortCircuitLibraryCheck()
+            return
+        }
+
         // Prefer matching the reported title to an unfinished row — skip/download lines
         // often arrive while activeSongIndex still points at a different placeholder.
         var idx: Int?
-        if !name.isEmpty {
-            let keys = Set(Self.candidateTitleKeys(for: name))
-            if !keys.isEmpty {
-                idx = songItems.firstIndex { song in
-                    !song.isFinished && Self.candidateTitleKeys(for: song.name).contains(where: keys.contains)
-                }
+        if !keys.isEmpty {
+            idx = songItems.firstIndex { song in
+                !song.isFinished && Self.candidateTitleKeys(for: song.name).contains(where: keys.contains)
             }
         }
         if idx == nil,
            let active = activeSongIndex, songItems.indices.contains(active),
            songItems[active].status == .downloading || songItems[active].status == .pending {
-            idx = active
-        } else if idx == nil, let next = songItems.firstIndex(where: { !$0.isFinished }) {
+            let activeName = songItems[active].name
+            let activeIsPlaceholder = activeName.hasPrefix("Song ")
+                || activeName.hasPrefix("Track ")
+                || activeName.isEmpty
+            let namesAlign = cleaned.isEmpty
+                || activeIsPlaceholder
+                || (!keys.isEmpty && Self.candidateTitleKeys(for: activeName).contains(where: keys.contains))
+            // For already-on-disk skips, never attach to an unrelated pending song.
+            if !alreadySavedSkip || namesAlign {
+                idx = active
+            }
+        }
+        if idx == nil, !alreadySavedSkip, let next = songItems.firstIndex(where: { !$0.isFinished }) {
             idx = next
         }
 
         guard let idx else {
+            // Unmatched already-saved skip must not create / steal Progress rows.
+            if alreadySavedSkip {
+                markNextDownloading()
+                return
+            }
             if !songCountLocked {
                 let n = songItems.count + 1
                 songItems.append(SongDownloadItem(
-                    id: n, number: n, name: name, status: status, fraction: 1,
+                    id: n, number: n, name: cleaned.isEmpty ? name : cleaned, status: status, fraction: 1,
                     skipReason: status == .skipped ? skipReason : .none
                 ))
                 totalExpected = max(totalExpected, songItems.count)
                 totalCompleted = min(totalExpected, totalCompleted + 1)
                 markNextDownloading()
             } else if let last = songItems.indices.last(where: { songItems[$0].status == .downloading }) {
-                songItems[last].name = name.isEmpty ? songItems[last].name : name
+                songItems[last].name = cleaned.isEmpty ? songItems[last].name : cleaned
                 songItems[last].status = status
                 songItems[last].fraction = 1
                 if status == .skipped { songItems[last].skipReason = skipReason }
@@ -2531,11 +2599,16 @@ final class DownloadService: ObservableObject {
         }
 
         // Keep richer "Artist — Title" labels when skip line only has a filename stem.
-        if !name.isEmpty {
+        if !cleaned.isEmpty {
             let current = songItems[idx].name
             let currentIsPlaceholder = current.hasPrefix("Song ") || current.hasPrefix("Track ") || current.isEmpty
-            if currentIsPlaceholder || current.count <= name.count {
-                songItems[idx].name = name
+            let cleanedLooksLikeFilename = cleaned.lowercased().hasSuffix(".ogg")
+                || cleaned.lowercased().hasSuffix(".flac")
+                || cleaned.lowercased().hasSuffix(".mp3")
+            if currentIsPlaceholder {
+                songItems[idx].name = cleaned
+            } else if !cleanedLooksLikeFilename, current.count <= cleaned.count {
+                songItems[idx].name = cleaned
             }
         }
         songItems[idx].status = status
@@ -2799,6 +2872,15 @@ final class DownloadService: ObservableObject {
 
     private func cleanSongName(_ raw: String) -> String {
         var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Path → filename
+        if s.contains("/") || s.contains("\\") {
+            s = URL(fileURLWithPath: s).lastPathComponent
+        }
+        // Strip audio extension so "Title.ogg" matches "Title.flac" / "Artist — Title".
+        let ext = (s as NSString).pathExtension.lowercased()
+        if ["ogg", "flac", "mp3", "m4a", "wav", "opus", "aac"].contains(ext) {
+            s = (s as NSString).deletingPathExtension
+        }
         // Strip leading index prefixes like "12_Artist_Title"
         if let r = try? NSRegularExpression(pattern: #"^\d+_"#),
            let match = r.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)),

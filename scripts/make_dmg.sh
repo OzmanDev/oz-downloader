@@ -157,8 +157,19 @@ mkdir -p "${STAGE}/.background"
 cp -R "${APP}" "${STAGE}/"
 ln -s /Applications "${STAGE}/Applications"
 
-# Classic drag-install artwork
-python3 "${ROOT}/scripts/make_dmg_background.py"
+# Classic drag-install artwork (Pillow required).
+echo "==> Generating DMG background (arrow)"
+BG_PY="${ROOT}/scripts/make_dmg_background.py"
+if ! python3 -c "from PIL import Image" 2>/dev/null; then
+  VENV="${BUILD}/dmg-venv"
+  if [[ ! -x "${VENV}/bin/python" ]]; then
+    python3 -m venv "${VENV}"
+    "${VENV}/bin/pip" -q install Pillow
+  fi
+  "${VENV}/bin/python" "${BG_PY}"
+else
+  python3 "${BG_PY}"
+fi
 cp "${BUILD}/dmg-resources/background.png" "${STAGE}/.background/background.png"
 
 echo "==> Creating DMG → ${DMG_PATH}"
@@ -166,6 +177,10 @@ rm -f "${DMG_PATH}"
 rm -f "${HOME}/Desktop/ZotifyStudio-Installer.dmg"
 TMP_DMG="${BUILD}/${DMG_NAME}-rw.dmg"
 rm -f "${TMP_DMG}"
+
+# Detach any leftover mounts from a previous failed run.
+hdiutil detach "/Volumes/${APP_NAME}" -force 2>/dev/null || true
+hdiutil detach "/Volumes/${APP_NAME} 1" -force 2>/dev/null || true
 
 # Read-write DMG so we can set Finder layout, then compress.
 hdiutil create \
@@ -185,9 +200,18 @@ fi
 
 sleep 1
 
+# Hide the background folder so it doesn’t show as an icon.
+if command -v SetFile >/dev/null 2>&1; then
+  SetFile -a V "${MOUNT_DIR}/.background" 2>/dev/null || true
+else
+  chflags hidden "${MOUNT_DIR}/.background" 2>/dev/null || true
+fi
+
 # Apply window size, background, and icon positions (app → Applications).
-osascript <<EOF || true
+# Finder writes these into .DS_Store — without that file the arrow never appears.
+osascript <<EOF
 tell application "Finder"
+  activate
   tell disk "${APP_NAME}"
     open
     set current view of container window to icon view
@@ -197,21 +221,58 @@ tell application "Finder"
     set viewOptions to the icon view options of container window
     set arrangement of viewOptions to not arranged
     set icon size of viewOptions to 96
-    set background picture of viewOptions to file ".background:background.png"
+    try
+      set background picture of viewOptions to file ".background:background.png"
+    end try
     set position of item "${APP_NAME}.app" of container window to {160, 180}
     set position of item "Applications" of container window to {480, 180}
     update without registering applications
-    delay 1
+    delay 2
     close
     open
-    delay 1
+    delay 2
+    close
   end tell
 end tell
 EOF
 
+# Force Finder to flush .DS_Store before we detach.
 sync
-hdiutil detach "${MOUNT_DIR}" -quiet || hdiutil detach "${VOLUME}" -quiet || true
+sleep 2
+if [[ ! -f "${MOUNT_DIR}/.DS_Store" ]]; then
+  echo "WARN: .DS_Store missing after Finder layout — retrying once"
+  osascript <<EOF
+tell application "Finder"
+  activate
+  tell disk "${APP_NAME}"
+    open
+    set viewOptions to the icon view options of container window
+    set background picture of viewOptions to file ".background:background.png"
+    set position of item "${APP_NAME}.app" of container window to {160, 180}
+    set position of item "Applications" of container window to {480, 180}
+    update without registering applications
+    delay 3
+    close
+  end tell
+end tell
+EOF
+  sync
+  sleep 2
+fi
 
+if [[ -f "${MOUNT_DIR}/.DS_Store" ]]; then
+  echo "    Finder layout saved (.DS_Store present)"
+else
+  echo "ERROR: Finder did not write .DS_Store — DMG would open without the arrow"
+  hdiutil detach "${MOUNT_DIR}" -force 2>/dev/null || true
+  exit 1
+fi
+
+# Detach firmly; convert fails if the volume is still busy.
+hdiutil detach "${MOUNT_DIR}" -force || hdiutil detach "${VOLUME}" -force
+sleep 1
+
+rm -f "${DMG_PATH}"
 hdiutil convert "${TMP_DMG}" -format UDZO -imagekey zlib-level=9 -o "${DMG_PATH}"
 rm -f "${TMP_DMG}"
 
