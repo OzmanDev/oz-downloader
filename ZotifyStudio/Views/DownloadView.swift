@@ -24,6 +24,7 @@ struct DownloadView: View {
                 // Keep Progress visible during + after a job so Get Music isn’t blank.
                 if downloads.isRunning
                     || downloads.isConverting
+                    || downloads.isRefreshingTags
                     || !downloads.queueItems.isEmpty
                     || !downloads.songItems.isEmpty
                     || !downloads.downloadErrorMessage.isEmpty
@@ -187,7 +188,7 @@ struct DownloadView: View {
 
     private var actionsRow: some View {
         HStack(spacing: 12) {
-            if downloads.isRunning {
+            if downloads.isRunning || downloads.isRefreshingTags {
                 Button("Cancel", role: .destructive) {
                     downloads.stop()
                 }
@@ -224,7 +225,7 @@ struct DownloadView: View {
                     .font(.headline)
                     .accessibilityIdentifier("progress.card")
                 Spacer()
-                if downloads.isRunning {
+                if downloads.isRunning || downloads.isRefreshingTags {
                     Button("Cancel", role: .destructive) {
                         downloads.stop()
                     }
@@ -261,7 +262,7 @@ struct DownloadView: View {
 
             if downloads.showCelebration {
                 celebrationBanner
-            } else {
+            } else if !progressSummary.isEmpty {
                 Text(progressSummary)
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("progress.summary")
@@ -386,6 +387,7 @@ struct DownloadView: View {
 
     /// True once songs are done and convert is next / active / finished this run.
     private var showsConvertProgress: Bool {
+        if downloads.isRefreshingTags { return true }
         guard downloads.autoConvertEnabled else { return false }
         if downloads.isConverting || downloads.convertFraction > 0 { return true }
         if downloads.convertSkipped
@@ -492,12 +494,15 @@ struct DownloadView: View {
     private var playlistQueueSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(downloads.queueItems.enumerated()), id: \.element.id) { index, item in
-                let role = downloads.queueRole(for: index)
+                let baseRole = downloads.queueRole(for: index)
+                let role = baseRole == "Done" && downloads.songItems.contains(where: { $0.status == .pending })
+                    ? "Incomplete"
+                    : baseRole
                 HStack(alignment: .center, spacing: 10) {
                     Text(role)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(roleColor(role))
-                        .frame(width: 44, alignment: .leading)
+                        .frame(minWidth: 88, alignment: .leading)
 
                     PlaylistArtworkView(imageURL: item.imageURL, spotifyURL: item.url, size: 36)
 
@@ -576,8 +581,10 @@ struct DownloadView: View {
         }
         let expected = max(downloads.totalExpected, downloads.songItems.count, 0)
         if expected > 0 {
-            let finished = downloads.songItems.filter(\.isFinished).count
-            return "\(finished) of \(expected)"
+            let counted = downloads.isRunning
+                ? downloads.songItems.filter(\.isFinished).count
+                : downloads.songItems.filter { $0.status == .done || $0.status == .skipped }.count
+            return "\(min(counted, expected)) of \(expected)"
         }
         if downloads.isRunning {
             return "Starting…"
@@ -627,9 +634,15 @@ struct DownloadView: View {
             return "Working on your music. You can leave this window open."
         }
         if downloads.songItems.isEmpty && downloads.queueItems.isEmpty {
+            if downloads.statusMessage.localizedCaseInsensitiveContains("names and tags") {
+                return downloads.statusMessage
+            }
             return "Ready when you are."
         }
         let status = downloads.statusMessage.lowercased()
+        if status.contains("names and tags updated") {
+            return "Names and tags updated"
+        }
         let anyFailed = downloads.songItems.contains(where: { $0.status == .failed })
         if status.contains("done"), !anyFailed {
             if downloads.queueItems.count > 1 {
@@ -638,8 +651,9 @@ struct DownloadView: View {
             return "All finished. Open Downloads to listen."
         }
         if anyFailed || status.contains("fail") || status.contains("error") {
+            // The red line under the summary already shows downloadErrorMessage.
             if !downloads.downloadErrorMessage.isEmpty {
-                return downloads.downloadErrorMessage
+                return ""
             }
             let n = downloads.songItems.filter { $0.status == .failed }.count
             if n > 0 {

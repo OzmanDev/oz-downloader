@@ -18,7 +18,7 @@ APPLE_ID="${APPLE_ID:-}"
 APPLE_TEAM_ID="${APPLE_TEAM_ID:-}"
 APPLE_APP_SPECIFIC_PASSWORD="${APPLE_APP_SPECIFIC_PASSWORD:-}"
 BUILD_STAMP="${BUILD_STAMP:-$(date +%Y.%m.%d.%H%M)}"
-APP_VERSION="${APP_VERSION:-0.2.0}"
+APP_VERSION="${APP_VERSION:-2.1.0}"
 
 echo "==> Compiling (${ARCHS})"
 mkdir -p "${BUILD}"
@@ -31,6 +31,7 @@ SOURCES=(
   "${ROOT}/ZotifyStudio/Services/AppStore.swift"
   "${ROOT}/ZotifyStudio/Services/ZotifyCLI.swift"
   "${ROOT}/ZotifyStudio/Services/DownloadService.swift"
+  "${ROOT}/ZotifyStudio/Services/DownloadFinish.swift"
   "${ROOT}/ZotifyStudio/Services/LinkPreviewService.swift"
   "${ROOT}/ZotifyStudio/Views/DownloadView.swift"
   "${ROOT}/ZotifyStudio/Views/PlaylistsView.swift"
@@ -158,18 +159,20 @@ cp -R "${APP}" "${STAGE}/"
 ln -s /Applications "${STAGE}/Applications"
 
 # Classic drag-install artwork (Pillow required).
+# Always use an isolated venv — the app runtime's PIL (and any PYTHONPATH from
+# bundling) can break system/homebrew Python imports.
 echo "==> Generating DMG background (arrow)"
 BG_PY="${ROOT}/scripts/make_dmg_background.py"
-if ! python3 -c "from PIL import Image" 2>/dev/null; then
-  VENV="${BUILD}/dmg-venv"
-  if [[ ! -x "${VENV}/bin/python" ]]; then
-    python3 -m venv "${VENV}"
-    "${VENV}/bin/pip" -q install Pillow
-  fi
-  "${VENV}/bin/python" "${BG_PY}"
-else
-  python3 "${BG_PY}"
+VENV="${BUILD}/dmg-venv"
+# Drop runtime PYTHONPATH so Pillow resolves inside the venv only.
+export -n PYTHONPATH PYTHONHOME 2>/dev/null || true
+unset PYTHONPATH PYTHONHOME || true
+if [[ ! -x "${VENV}/bin/python" ]] || ! env -u PYTHONPATH -u PYTHONHOME "${VENV}/bin/python" -c "from PIL import Image" 2>/dev/null; then
+  rm -rf "${VENV}"
+  /opt/homebrew/bin/python3 -m venv "${VENV}" 2>/dev/null || python3 -m venv "${VENV}"
+  env -u PYTHONPATH -u PYTHONHOME "${VENV}/bin/python" -m pip -q install --upgrade pip Pillow
 fi
+env -u PYTHONPATH -u PYTHONHOME "${VENV}/bin/python" "${BG_PY}"
 cp "${BUILD}/dmg-resources/background.png" "${STAGE}/.background/background.png"
 
 echo "==> Creating DMG → ${DMG_PATH}"
