@@ -11,7 +11,7 @@ struct ContactFooter: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            Text("Oz Downloader v2.1.0 · made with \u{2764}\u{FE0F} by Oz")
+            Text("Oz Downloader v" + WhatsNew.version + " · made with \u{2764}\u{FE0F} by Oz")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
 
