@@ -13,3 +13,4 @@
 - **Local file**: the song exists only as a file on the Spotify account, with no stream.
 - **No audio stream**: Spotify did not send the audio.
 - **Filtered**: the song matched a skip filter.
+- **What's new**: the notes shown the first time this version of the app is opened.

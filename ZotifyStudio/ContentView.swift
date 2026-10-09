@@ -28,6 +28,7 @@ private enum AppTab: Hashable, CaseIterable {
 struct ContentView: View {
     @EnvironmentObject private var downloads: DownloadService
     @State private var selectedTab: AppTab = .getMusic
+    @State private var showWhatsNew = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -77,6 +78,15 @@ struct ContentView: View {
             if selectedTab == .getMusic,
                downloads.tabBadge == .success || downloads.tabBadge == .failure {
                 downloads.clearTabBadge()
+            }
+            if WhatsNew.shouldPresent(lastSeenVersion: WhatsNewMemory.lastSeen()) {
+                showWhatsNew = true
+            }
+        }
+        .sheet(isPresented: $showWhatsNew) {
+            WhatsNewSheet {
+                WhatsNewMemory.markSeen()
+                showWhatsNew = false
             }
         }
     }
