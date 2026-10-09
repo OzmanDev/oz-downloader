@@ -70,6 +70,27 @@ enum TestDownloadFinish {
             failures.append("16. track list ready, inProgress and failed rows: mayStopEarly expected false, got \(stopEarlyInProgressFailed)")
         }
 
+        let queuedBehind = DownloadQueue.mergedStartURLs(
+            started: ["https://open.spotify.com/playlist/first"],
+            existing: [
+                "https://open.spotify.com/playlist/first",
+                "https://open.spotify.com/playlist/second",
+            ]
+        )
+        if queuedBehind != [
+            "https://open.spotify.com/playlist/first",
+            "https://open.spotify.com/playlist/second",
+        ] {
+            failures.append("17. a second playlist is appended behind the one already started, got \(queuedBehind)")
+        }
+        let sameLink = DownloadQueue.mergedStartURLs(
+            started: ["https://open.spotify.com/playlist/first"],
+            existing: ["https://open.spotify.com/playlist/first?si=abc"]
+        )
+        if sameLink.count != 1 {
+            failures.append("18. the same playlist link is not queued twice, got \(sameLink)")
+        }
+
         if failures.isEmpty {
             return
         }

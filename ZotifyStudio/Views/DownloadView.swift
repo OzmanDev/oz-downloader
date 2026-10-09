@@ -156,7 +156,7 @@ struct DownloadView: View {
                     LinkPreviewCard(
                         preview: preview,
                         downloadTitle: downloadButtonTitle(for: preview),
-                        isDownloading: downloads.isRunning,
+                        isDownloading: downloads.hasActiveDownload,
                         canDownload: !collectURLs().isEmpty,
                         onDownload: index == okPreviews.first?.offset ? { start() } : nil
                     )
@@ -859,8 +859,9 @@ struct DownloadView: View {
                 imageURL: ""
             )
         }
-        // Keep paste-based preview; show Progress immediately.
-        if !downloads.isRunning {
+        // Keep paste-based preview. A download already running stays on screen; this link is appended.
+        let startToken = downloads.claimDownloadStartIfIdle()
+        if startToken != nil {
             downloads.prepareJobUI(
                 queue: initialQueue,
                 expectedTracks: max(expected, names.count, trackIds.count, 1),
@@ -888,8 +889,13 @@ struct DownloadView: View {
                 expectedTracks: expected,
                 trackNames: names,
                 trackIds: trackIds,
-                startedToast: startedToast,
-                queue: initialQueue
+                startedToast: startToken == nil
+                    ? (initialQueue.count == 1
+                        ? "Queued — \(initialQueue[0].name)"
+                        : "Queued \(initialQueue.count) playlists")
+                    : startedToast,
+                queue: initialQueue,
+                startToken: startToken
             )
             if ok {
                 for preview in toRemember {

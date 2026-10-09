@@ -60,6 +60,7 @@ final class AppStore: ObservableObject {
         playlists = loadedPlaylists
         account = JSONStore.load(SpotifyAccountInfo.self, from: AppPaths.accountURL, fallback: .empty)
         spotifyPlaylists = JSONStore.load([FetchedPlaylist].self, from: AppPaths.spotifyPlaylistsURL, fallback: [])
+        raiseSavedTrackCountsFromSpotify()
         if let data = try? Data(contentsOf: AppPaths.avatarURL),
            let image = NSImage(data: data) {
             avatarImage = image
@@ -155,6 +156,34 @@ final class AppStore: ObservableObject {
     func replaceSpotifyPlaylists(_ items: [FetchedPlaylist]) {
         spotifyPlaylists = items
         JSONStore.save(items, to: AppPaths.spotifyPlaylistsURL)
+        raiseSavedTrackCountsFromSpotify()
+    }
+
+    /// Keep a saved song count when Spotify's list for the same URL is longer.
+    func noteSavedTrackCount(url: String, learned: Int) {
+        guard let idx = playlists.firstIndex(where: { Self.sameSpotifyURL($0.url, url) }) else { return }
+        let next = SavedPlaylistCount.preferred(current: playlists[idx].trackCount, learned: learned)
+        guard next != playlists[idx].trackCount else { return }
+        playlists[idx].trackCount = next
+    }
+
+    /// Raise saved counts from the cached Spotify list. Skips the save when nothing changes.
+    private func raiseSavedTrackCountsFromSpotify() {
+        var updated = playlists
+        var changed = false
+        for index in updated.indices {
+            guard let fetched = spotifyPlaylists.first(where: { Self.sameSpotifyURL($0.url, updated[index].url) }) else {
+                continue
+            }
+            let next = SavedPlaylistCount.preferred(current: updated[index].trackCount, learned: fetched.trackCount)
+            if next != updated[index].trackCount {
+                updated[index].trackCount = next
+                changed = true
+            }
+        }
+        if changed {
+            playlists = updated
+        }
     }
 
     func clearAvatar() {
@@ -296,11 +325,13 @@ final class AppStore: ObservableObject {
         if let idx = playlists.firstIndex(where: { Self.sameSpotifyURL($0.url, item.url) }) {
             var merged = playlists[idx]
             if !item.name.isEmpty { merged.name = item.name }
-            if item.trackCount > 0 { merged.trackCount = item.trackCount }
+            merged.trackCount = SavedPlaylistCount.preferred(current: merged.trackCount, learned: item.trackCount)
             if !item.imageURL.isEmpty { merged.imageURL = item.imageURL }
             playlists[idx] = merged
         } else if let idx = playlists.firstIndex(where: { $0.alias == item.alias }) {
-            playlists[idx] = item
+            var merged = item
+            merged.trackCount = SavedPlaylistCount.preferred(current: playlists[idx].trackCount, learned: item.trackCount)
+            playlists[idx] = merged
         } else {
             playlists.append(item)
         }
@@ -318,7 +349,7 @@ final class AppStore: ObservableObject {
         if let idx = playlists.firstIndex(where: { Self.sameSpotifyURL($0.url, u) }) {
             var existing = playlists[idx]
             existing.name = finalName
-            if trackCount > 0 { existing.trackCount = trackCount }
+            existing.trackCount = SavedPlaylistCount.preferred(current: existing.trackCount, learned: trackCount)
             if !img.isEmpty { existing.imageURL = img }
             playlists[idx] = existing
             return

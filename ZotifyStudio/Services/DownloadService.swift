@@ -122,6 +122,10 @@ enum DownloadPhase: Equatable {
 final class DownloadService: ObservableObject {
     @Published var logText: String = ""
     @Published var isRunning = false
+    /// True from the click that starts a job until that job finishes, including before `isRunning` flips on.
+    private var downloadStartClaimed = false
+    private var downloadStartToken: UUID?
+    var hasActiveDownload: Bool { isRunning || downloadStartClaimed }
     @Published var statusMessage: String = ""
     /// High-level activity for Progress UI (checking vs downloading vs converting).
     @Published var downloadPhase: DownloadPhase = .idle
@@ -749,6 +753,15 @@ final class DownloadService: ObservableObject {
             .joined(separator: " ")
     }
 
+    /// Call on the click, before any async work. Nil means a download is already active, so the caller must append.
+    func claimDownloadStartIfIdle() -> UUID? {
+        if isRunning || downloadStartClaimed { return nil }
+        let token = UUID()
+        downloadStartToken = token
+        downloadStartClaimed = true
+        return token
+    }
+
     @discardableResult
     func download(
         urls: [String],
@@ -758,7 +771,8 @@ final class DownloadService: ObservableObject {
         trackNames: [String] = [],
         trackIds: [String] = [],
         startedToast: String? = nil,
-        queue: [DownloadQueueItem] = []
+        queue: [DownloadQueueItem] = [],
+        startToken: UUID? = nil
     ) async -> Bool {
         guard !urls.isEmpty else {
             appendLog("Add a Spotify link or choose a playlist first.")
@@ -769,8 +783,17 @@ final class DownloadService: ObservableObject {
             return false
         }
 
+        let isOwner = startToken != nil && startToken == downloadStartToken
+        let ownedToken: UUID? = isOwner ? startToken : nil
+        var handedOff = false
+        defer {
+            if let ownedToken, !handedOff, downloadStartToken == ownedToken {
+                downloadStartClaimed = false
+                downloadStartToken = nil
+            }
+        }
         // Already downloading — append instead of interrupting.
-        if isRunning, !cancelFlag.value {
+        if !isOwner, (isRunning || downloadStartClaimed), !cancelFlag.value {
             return enqueueWhileRunning(urls: urls, queue: queue, startedToast: startedToast)
         }
 
@@ -795,9 +818,8 @@ final class DownloadService: ObservableObject {
             return false
         }
 
-        // Clear previous job UI immediately so a new download never flashes old progress.
+        // Clear the song list for this job. Keep queue rows so a second click during startup stays behind this one.
         songItems = []
-        queueItems = []
         totalExpected = 0
         totalCompleted = 0
         sessionTrackIds = []
@@ -813,6 +835,11 @@ final class DownloadService: ObservableObject {
         await killOrphanZotifyProcessesAwaiting(source: "downloadStart")
         downloadHadError = false
         isRunning = true
+        if let ownedToken, downloadStartToken == ownedToken {
+            downloadStartClaimed = false
+            downloadStartToken = nil
+            handedOff = true
+        }
         downloadGeneration += 1
         trackListReady = false
         setPhase(.starting)
@@ -851,6 +878,16 @@ final class DownloadService: ObservableObject {
         }
 
         var items = buildQueueItems(urls: urls, queue: queue)
+        let mergedURLs = DownloadQueue.mergedStartURLs(
+            started: items.map(\.url),
+            existing: queueItems.map(\.url)
+        )
+        items = mergedURLs.compactMap { url in
+            if let queued = queueItems.first(where: { AppStore.sameSpotifyURL($0.url, url) }) {
+                return queued
+            }
+            return items.first(where: { AppStore.sameSpotifyURL($0.url, url) })
+        }
         for i in items.indices {
             items[i].status = .pending
             items[i].retryAttempt = 0
@@ -879,6 +916,7 @@ final class DownloadService: ObservableObject {
                     }
                     if preview.trackCount > 0 {
                         queueItems[0].trackCount = preview.trackCount
+                        activeStore?.noteSavedTrackCount(url: queueItems[0].url, learned: preview.trackCount)
                     }
                 }
             }
@@ -1899,8 +1937,12 @@ final class DownloadService: ObservableObject {
     }
 
     func prefetchTrackTitlesInBackground(url: String, musicRoot: String) {
-        guard isRunning else { return }
+        guard isRunning || downloadStartClaimed else { return }
         guard !url.isEmpty, !titlePrefetchInFlight else { return }
+        if queueItems.indices.contains(currentQueueIndex),
+           !AppStore.sameSpotifyURL(queueItems[currentQueueIndex].url, url) {
+            return
+        }
         let token = UUID()
         titlePrefetchToken = token
         titlePrefetchInFlight = true
@@ -1936,6 +1978,10 @@ final class DownloadService: ObservableObject {
             if queueItems.indices.contains(currentQueueIndex) {
                 if preview.trackCount > queueItems[currentQueueIndex].trackCount {
                     queueItems[currentQueueIndex].trackCount = preview.trackCount
+                    activeStore?.noteSavedTrackCount(
+                        url: queueItems[currentQueueIndex].url,
+                        learned: preview.trackCount
+                    )
                 }
                 let playlistName = queueItems[currentQueueIndex].name
                 applyLiveDiskProgress(root: musicRoot, playlistName: playlistName)

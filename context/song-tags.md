@@ -35,6 +35,13 @@ Dj Afro under Saved here listed 92 songs. Spotify listed 105. Progress showed 92
 - **Failed**: a progress row that did not download. It is not finished.
 - Do not stop the download early, and do not mark the playlist Done, while any row is Failed.
 
+## Saved song count, 2026-10-09
+
+- **Saved song count**: the number under a playlist in Saved here. It is the playlist’s length on Spotify, stored on the saved playlist.
+- It is not the number of audio files in the folder. Extra files on disk do not raise it.
+- When Spotify’s list is longer than the stored count, the stored count becomes that longer list. A missing or shorter lookup does not lower it.
+- Dj Afro was stored as 92. Spotify’s list is 105. Get Music showed 105. Saved here stayed 92 because the download never wrote 105 back.
+
 ## Seam
 
 `decide_metadata(stem, tag_artist, tag_title, tag_album)` returns the track index, artist, title, and whether the lookup must match featured names. Convert and refetch both call it before writing tags. Tests call this function only. They do not call iTunes.

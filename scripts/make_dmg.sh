@@ -29,6 +29,7 @@ SOURCES=(
   "${ROOT}/ZotifyStudio/Models/Models.swift"
   "${ROOT}/ZotifyStudio/Models/FriendlyLabels.swift"
   "${ROOT}/ZotifyStudio/Services/AppStore.swift"
+  "${ROOT}/ZotifyStudio/Services/SavedPlaylistCount.swift"
   "${ROOT}/ZotifyStudio/Services/ZotifyCLI.swift"
   "${ROOT}/ZotifyStudio/Services/DownloadService.swift"
   "${ROOT}/ZotifyStudio/Services/DownloadFinish.swift"

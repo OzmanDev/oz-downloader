@@ -166,7 +166,7 @@ struct PlaylistsView: View {
             }
 
             if hasDownloadSelection {
-                Button(downloads.isRunning ? "Add selected to queue" : "Download selected") { downloadSelected() }
+                Button(downloads.hasActiveDownload ? "Add selected to queue" : "Download selected") { downloadSelected() }
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("playlists.downloadSelected")
             }
@@ -748,24 +748,24 @@ struct PlaylistsView: View {
         let firstCount = max(queue.first?.trackCount ?? 0, expected > 0 ? min(expected, queue.first?.trackCount ?? expected) : 1, 1)
         let placeholders = (0..<firstCount).map { "Song \($0 + 1)" }
 
-        // Show Progress on Get Music immediately (do not wait for metadata lookup).
-        if !downloads.isRunning {
+        // A download already on screen stays put. This click only appends.
+        let startToken = downloads.claimDownloadStartIfIdle()
+        if startToken != nil {
             downloads.prepareJobUI(
                 queue: queue,
                 expectedTracks: max(expected, firstCount),
                 trackNames: placeholders,
                 trackIds: []
             )
+            if let first = queue.first {
+                downloads.prefetchTrackTitlesInBackground(url: first.url, musicRoot: store.settings.rootPath)
+            }
         }
         downloads.requestShowGetMusic = true
-        // Prefetch real track titles in background (Progress already visible with placeholders).
-        if let first = queue.first {
-            downloads.prefetchTrackTitlesInBackground(url: first.url, musicRoot: store.settings.rootPath)
-        }
 
         Task {
             let toastForRun: String
-            if downloads.isRunning {
+            if startToken == nil {
                 toastForRun = queue.count == 1
                     ? "Queued — \(queue[0].name)"
                     : "Queued \(queue.count) playlists"
@@ -780,14 +780,22 @@ struct PlaylistsView: View {
                 trackNames: [],
                 trackIds: [],
                 startedToast: toastForRun,
-                queue: queue
+                queue: queue,
+                startToken: startToken
             )
             if ok {
+                for url in fromSaved.map(\.url) + fromSpotify.map(\.url) {
+                    if let item = downloads.queueItems.first(where: { AppStore.sameSpotifyURL($0.url, url) }) {
+                        store.noteSavedTrackCount(url: item.url, learned: item.trackCount)
+                    }
+                }
                 for pl in fromSpotify {
+                    let item = downloads.queueItems.first(where: { AppStore.sameSpotifyURL($0.url, pl.url) })
+                    let learnedCount = item?.trackCount ?? 0
                     store.rememberPlaylist(
                         name: pl.name,
                         url: pl.url,
-                        trackCount: pl.trackCount,
+                        trackCount: learnedCount > 0 ? learnedCount : pl.trackCount,
                         imageURL: pl.imageURL
                     )
                 }
