@@ -13,6 +13,7 @@ import { downloadService } from '../services/downloadService';
 import { linkPreviewService } from '../services/linkPreviewService';
 import { LinkPreviewCard } from '../components/LinkPreviewCard';
 import { SongDownloadItem } from '../types/downloads';
+import { rowLabel } from '../services/downloadLineOutcome';
 
 export const GetMusicView: React.FC = () => {
   const [urlsText, setUrlsText] = useState(linkPreviewService.urlsText);
@@ -121,11 +122,15 @@ export const GetMusicView: React.FC = () => {
     [songItems]
   );
   const inProgress = useMemo(
-    () => songItems.filter((s) => s.status === 'downloading' || s.status === 'failed'),
+    () => songItems.filter((s) => s.status === 'downloading'),
     [songItems]
   );
   const skipped = useMemo(
     () => songItems.filter((s) => s.status === 'skipped'),
+    [songItems]
+  );
+  const failed = useMemo(
+    () => songItems.filter((s) => s.status === 'failed'),
     [songItems]
   );
   const downloaded = useMemo(
@@ -387,7 +392,7 @@ export const GetMusicView: React.FC = () => {
           )}
 
           {showProgressDetails && songItems.length > 0 && (
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-5 gap-2">
               <ProgressColumn title="Waiting" songs={waiting} accent="border-white/10" />
               <ProgressColumn
                 title="In progress"
@@ -395,6 +400,7 @@ export const GetMusicView: React.FC = () => {
                 accent="border-sky-500/40"
               />
               <ProgressColumn title="Skipped" songs={skipped} accent="border-orange-500/40" />
+              <ProgressColumn title="Failed" songs={failed} accent="border-red-500/40" />
               <ProgressColumn
                 title="Downloaded"
                 songs={downloaded}
@@ -417,12 +423,9 @@ function songStatusLabel(song: SongDownloadItem): string {
     case 'done':
       return 'Downloaded';
     case 'skipped':
-      if (song.skipReason === 'duplicate') return 'Duplicate';
-      if (song.skipReason === 'alreadySaved') return 'Already here';
-      if (song.skipReason === 'cancelled') return 'Cancelled';
-      return 'Skipped';
+      return rowLabel('skipped', song.reasonLabel, song.skipReason);
     case 'failed':
-      return 'Failed';
+      return rowLabel('failed', song.reasonLabel, song.skipReason);
     default:
       return '';
   }

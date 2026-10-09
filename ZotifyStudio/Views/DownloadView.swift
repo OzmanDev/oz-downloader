@@ -328,16 +328,16 @@ struct DownloadView: View {
                             .padding(.top, 2)
                     } else {
                         let waiting = downloads.songItems.filter { $0.status == .pending }
-                        let inProgress = downloads.songItems.filter {
-                            $0.status == .downloading || $0.status == .failed
-                        }
+                        let inProgress = downloads.songItems.filter { $0.status == .downloading }
                         let skipped = downloads.songItems.filter { $0.status == .skipped }
+                        let failed = downloads.songItems.filter { $0.status == .failed }
                         let downloaded = downloads.songItems.filter { $0.status == .done }
 
                         HStack(alignment: .top, spacing: 8) {
                             progressColumn(title: "Waiting", songs: waiting, accent: .secondary)
                             progressColumn(title: "In progress", songs: inProgress, accent: .accentColor)
                             progressColumn(title: "Skipped", songs: skipped, accent: .orange)
+                            progressColumn(title: "Failed", songs: failed, accent: .red)
                             progressColumn(title: "Downloaded", songs: downloaded, accent: .green)
                         }
                     }
@@ -766,14 +766,32 @@ struct DownloadView: View {
         case .downloading:
             return "\(Int(max(song.fraction, 0) * 100))%"
         case .done: return "Downloaded"
-        case .skipped:
-            switch song.skipReason {
-            case .duplicate: return "Duplicate"
-            case .alreadySaved: return "Already here"
-            case .cancelled: return "Cancelled"
-            case .none: return "Skipped"
-            }
-        case .failed: return "Failed"
+        case .skipped, .failed:
+            return ProgressBoard.rowLabel(
+                status: boardStatus(song.status),
+                reasonLabel: song.reasonLabel,
+                skipReason: skipReasonToken(song.skipReason)
+            )
+        }
+    }
+
+    private func boardStatus(_ status: SongDownloadItem.Status) -> SongBoardStatus {
+        switch status {
+        case .pending: return .waiting
+        case .downloading: return .inProgress
+        case .skipped: return .skipped
+        case .failed: return .failed
+        case .done: return .downloaded
+        }
+    }
+
+    private func skipReasonToken(_ reason: SongDownloadItem.SkipReason) -> String {
+        switch reason {
+        case .alreadySaved: return "alreadySaved"
+        case .duplicate: return "duplicate"
+        case .cancelled: return "cancelled"
+        case .filtered: return "filtered"
+        case .none: return "none"
         }
     }
 

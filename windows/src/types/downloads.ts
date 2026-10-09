@@ -1,5 +1,5 @@
 export type SongStatus = 'pending' | 'downloading' | 'done' | 'skipped' | 'failed';
-export type SkipReason = 'none' | 'duplicate' | 'alreadySaved' | 'cancelled';
+export type SkipReason = 'none' | 'duplicate' | 'alreadySaved' | 'cancelled' | 'filtered';
 
 export type DownloadPhase =
   | 'idle'
@@ -20,6 +20,7 @@ export interface SongDownloadItem {
   fraction: number;
   trackId: string;
   skipReason: SkipReason;
+  reasonLabel: string;
 }
 
 export type QueueStatus = 'pending' | 'downloading' | 'done' | 'failed' | 'cancelled';

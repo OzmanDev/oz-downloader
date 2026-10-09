@@ -7,6 +7,7 @@ import { DownloadTabBadge, FetchedPlaylist } from '../types/models';
 import { appStore } from './appStore';
 import { getAppPaths, escapePythonPath } from './appPaths';
 import { ZotifyCLI } from './zotifyCLI';
+import { classify, summary } from './downloadLineOutcome';
 
 type Listener = () => void;
 
@@ -90,8 +91,9 @@ class DownloadServiceState {
 
   get phaseProgressSummary(): string {
     const skipped = this.songItems.filter((s) => s.status === 'skipped').length;
+    const failed = this.songItems.filter((s) => s.status === 'failed').length;
     const left = this.songItems.filter(
-      (s) => s.status === 'pending' || s.status === 'downloading' || s.status === 'failed'
+      (s) => s.status === 'pending' || s.status === 'downloading'
     ).length;
     switch (this.downloadPhase) {
       case 'idle':
@@ -101,10 +103,10 @@ class DownloadServiceState {
       case 'fetchingTrackInfo':
         return 'Loading song titles from Spotify…';
       case 'checkingExisting':
-        if (skipped > 0 || left > 0) return `${skipped} skipped · ${left} left`;
+        if (skipped > 0 || failed > 0 || left > 0) return summary(skipped, failed, left);
         return 'Checking which songs you already have.';
       case 'downloading':
-        return `${skipped} skipped · ${left} left`;
+        return summary(skipped, failed, left);
       case 'converting':
         return this.convertLabel || 'Converting downloaded files to FLAC, embedding lyrics, and renaming…';
       case 'signingIn':
@@ -309,6 +311,7 @@ class DownloadServiceState {
       fraction: 0,
       trackId: '',
       skipReason: 'none' as const,
+      reasonLabel: '',
     }));
     this.totalExpected = Math.max(this.totalExpected, count);
   }
@@ -366,6 +369,7 @@ class DownloadServiceState {
         fraction: 0,
         trackId: '',
         skipReason: 'none',
+        reasonLabel: '',
       };
       this.songItems.push(existing);
       this.songItems.sort((a, b) => a.number - b.number);
@@ -388,7 +392,8 @@ class DownloadServiceState {
   private completeActive(
     status: 'done' | 'skipped' | 'failed',
     skipReason: SongDownloadItem['skipReason'] = 'none',
-    name?: string
+    name?: string,
+    reasonLabel: string = ''
   ) {
     let active =
       (this.activeSongIndex != null ? this.songItems[this.activeSongIndex] : undefined) ||
@@ -398,6 +403,7 @@ class DownloadServiceState {
     if (name) active.name = name;
     active.status = status;
     active.fraction = 1;
+    active.reasonLabel = reasonLabel;
     if (status === 'skipped') {
       active.skipReason = skipReason === 'none' ? 'alreadySaved' : skipReason;
     }
@@ -466,16 +472,25 @@ class DownloadServiceState {
       }
     }
 
-    if (
-      upper.includes('SKIPPING') ||
-      line.includes('already exists') ||
-      line.includes('already on disk')
-    ) {
+    const classified = classify(line);
+    if (classified) {
+      const quoted = classified.quotedName ?? '';
+      const base = quoted.replace(/^.*[/\\]/, '').replace(/\.[^.]+$/, '');
+      const title = base || undefined;
+      if (classified.kind === 'failed') {
+        this.completeActive('failed', 'none', title, classified.label);
+        this.notify();
+        return;
+      }
       if (this.downloadPhase !== 'downloading') {
         this.setPhase('checkingExisting');
       }
-      const skipReason = upper.includes('DUPLICATE') ? 'duplicate' : 'alreadySaved';
-      this.completeActive('skipped', skipReason);
+      this.completeActive(
+        'skipped',
+        classified.alreadySaved ? 'alreadySaved' : 'filtered',
+        title,
+        classified.label
+      );
       this.notify();
       return;
     }
@@ -491,11 +506,6 @@ class DownloadServiceState {
       this.completeActive('done', 'none', name);
       this.notify();
       return;
-    }
-
-    if (upper.includes('FAILED TO GET CONTENT STREAM')) {
-      this.completeActive('failed');
-      this.notify();
     }
   }
 

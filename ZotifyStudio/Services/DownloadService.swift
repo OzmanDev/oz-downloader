@@ -26,6 +26,7 @@ struct SongDownloadItem: Identifiable, Equatable {
         case duplicate          // same song appears again in the playlist
         case alreadySaved       // skip-existing / already on disk
         case cancelled
+        case filtered
     }
 
     let id: Int
@@ -35,6 +36,7 @@ struct SongDownloadItem: Identifiable, Equatable {
     var fraction: Double
     var trackId: String
     var skipReason: SkipReason
+    var reasonLabel: String
 
     var isFinished: Bool {
         status == .done || status == .skipped || status == .failed
@@ -49,7 +51,8 @@ struct SongDownloadItem: Identifiable, Equatable {
         status: Status,
         fraction: Double,
         trackId: String = "",
-        skipReason: SkipReason = .none
+        skipReason: SkipReason = .none,
+        reasonLabel: String = ""
     ) {
         self.id = id
         self.number = number
@@ -58,6 +61,7 @@ struct SongDownloadItem: Identifiable, Equatable {
         self.fraction = fraction
         self.trackId = trackId
         self.skipReason = skipReason
+        self.reasonLabel = reasonLabel
     }
 }
 
@@ -204,8 +208,9 @@ final class DownloadService: ObservableObject {
     /// One-line Progress summary under the card title.
     var phaseProgressSummary: String {
         let skipped = songItems.filter { $0.status == .skipped }.count
+        let failed = songItems.filter { $0.status == .failed }.count
         let left = songItems.filter {
-            $0.status == .pending || $0.status == .downloading || $0.status == .failed
+            $0.status == .pending || $0.status == .downloading
         }.count
         switch downloadPhase {
         case .idle:
@@ -215,12 +220,12 @@ final class DownloadService: ObservableObject {
         case .fetchingTrackInfo:
             return "Loading song titles from Spotify…"
         case .checkingExisting:
-            if skipped > 0 || left > 0 {
-                return "\(skipped) skipped · \(left) left"
+            if skipped > 0 || failed > 0 || left > 0 {
+                return ProgressBoard.summary(skipped: skipped, failed: failed, left: left)
             }
             return "Checking which songs you already have. You can leave this window open."
         case .downloading:
-            return "\(skipped) skipped · \(left) left"
+            return ProgressBoard.summary(skipped: skipped, failed: failed, left: left)
         case .converting:
             return convertLabel.isEmpty
                 ? "Converting downloaded files to FLAC, embedding lyrics, and renaming…"
@@ -701,6 +706,7 @@ final class DownloadService: ObservableObject {
                     item.status = prev.status
                     item.fraction = prev.fraction
                     item.skipReason = prev.skipReason
+                    item.reasonLabel = prev.reasonLabel
                 }
             }
             return item
@@ -2577,42 +2583,58 @@ final class DownloadService: ObservableObject {
         // Ignore further song progress once converting.
         if isConverting { return }
 
-        if let name = Self.extractHashtagQuoted(line, label: "SKIPPING") {
+        if let classified = DownloadLineOutcome.classify(line) {
+            if classified.kind == .failed {
+                if let quoted = classified.quotedName, !quoted.isEmpty {
+                    completeCurrentSong(
+                        name: cleanSongName(quoted),
+                        status: .failed,
+                        reasonLabel: classified.label
+                    )
+                    return
+                }
+                let idx = activeSongIndex
+                    ?? songItems.firstIndex(where: { $0.status == .downloading })
+                    ?? songItems.firstIndex(where: { $0.status == .pending })
+                if let idx, songItems.indices.contains(idx),
+                   recoverSongFromDiskIfPresent(at: idx) {
+                    totalCompleted = songItems.filter { $0.status == .done || $0.status == .skipped }.count
+                    activeSongIndex = nil
+                    markNextDownloading()
+                    return
+                }
+                let songName = songItems[safe: idx ?? -1]?.name ?? "Song"
+                completeCurrentSong(name: songName, status: .failed, reasonLabel: classified.label)
+                return
+            }
             if downloadPhase != .downloading {
                 setPhase(.checkingExisting)
             }
-            completeCurrentSong(name: cleanSongName(name), status: .skipped, skipReason: .alreadySaved)
-            return
-        }
-        // zotify prints "SKIPPING TRACK" for skip-existing — must NOT mark Failed.
-        if line.uppercased().contains("SKIPPING TRACK") {
-            if downloadPhase != .downloading {
-                setPhase(.checkingExisting)
+            let quoted = classified.quotedName.map { cleanSongName($0) } ?? ""
+            let songName = quoted.isEmpty
+                ? (songItems[safe: activeSongIndex ?? -1]?.name ?? "Song")
+                : quoted
+            if classified.alreadySaved {
+                completeCurrentSong(
+                    name: songName,
+                    status: .skipped,
+                    skipReason: .alreadySaved,
+                    reasonLabel: classified.label
+                )
+            } else {
+                completeCurrentSong(
+                    name: songName,
+                    status: .skipped,
+                    skipReason: .filtered,
+                    reasonLabel: classified.label
+                )
             }
-            let songName = songItems[safe: activeSongIndex ?? -1]?.name ?? "Song"
-            completeCurrentSong(name: songName, status: .skipped, skipReason: .alreadySaved)
             return
         }
         if let path = Self.extractHashtagQuoted(line, label: "DOWNLOADED") {
             setPhase(.downloading)
             let base = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
             completeCurrentSong(name: cleanSongName(base), status: .done)
-            return
-        }
-        if line.contains("FAILED TO GET CONTENT STREAM") {
-            // File may already exist (app folder or legacy Zotify Music) — don't show Failed.
-            let idx = activeSongIndex
-                ?? songItems.firstIndex(where: { $0.status == .downloading })
-                ?? songItems.firstIndex(where: { $0.status == .pending })
-            if let idx, songItems.indices.contains(idx),
-               recoverSongFromDiskIfPresent(at: idx) {
-                totalCompleted = songItems.filter { $0.status == .done || $0.status == .skipped }.count
-                activeSongIndex = nil
-                markNextDownloading()
-                return
-            }
-            let songName = songItems[safe: idx ?? -1]?.name ?? "Song"
-            completeCurrentSong(name: songName, status: .failed)
             return
         }
 
@@ -2766,7 +2788,8 @@ final class DownloadService: ObservableObject {
     private func completeCurrentSong(
         name: String,
         status: SongDownloadItem.Status,
-        skipReason: SongDownloadItem.SkipReason = .none
+        skipReason: SongDownloadItem.SkipReason = .none,
+        reasonLabel: String = ""
     ) {
         if isConverting { return }
         // Never invent phantom "Song N" rows just because we finished one.
@@ -2825,7 +2848,8 @@ final class DownloadService: ObservableObject {
                 let n = songItems.count + 1
                 songItems.append(SongDownloadItem(
                     id: n, number: n, name: cleaned.isEmpty ? name : cleaned, status: status, fraction: 1,
-                    skipReason: status == .skipped ? skipReason : .none
+                    skipReason: status == .skipped ? skipReason : .none,
+                    reasonLabel: reasonLabel
                 ))
                 totalExpected = max(totalExpected, songItems.count)
                 totalCompleted = min(totalExpected, totalCompleted + 1)
@@ -2834,6 +2858,7 @@ final class DownloadService: ObservableObject {
                 songItems[last].name = cleaned.isEmpty ? songItems[last].name : cleaned
                 songItems[last].status = status
                 songItems[last].fraction = 1
+                songItems[last].reasonLabel = reasonLabel
                 if status == .skipped { songItems[last].skipReason = skipReason }
                 activeSongIndex = nil
             }
@@ -2855,6 +2880,7 @@ final class DownloadService: ObservableObject {
         }
         songItems[idx].status = status
         songItems[idx].fraction = 1
+        songItems[idx].reasonLabel = reasonLabel
         if status == .skipped {
             songItems[idx].skipReason = skipReason == .none ? .alreadySaved : skipReason
         }
