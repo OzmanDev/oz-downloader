@@ -1009,12 +1009,18 @@ final class DownloadService: ObservableObject {
                 )
                 applyLiveDiskProgress(root: root, playlistName: item.name)
 
-                let attemptResult = await runPlaylistAttempt(
-                    playlistURL: item.url,
-                    zotify: zotify,
-                    root: root,
-                    flag: flag
-                )
+                // Everything saved already: don't start zotify just to hit a session error.
+                let attemptResult: (Bool, String)
+                if libraryCheckComplete.value {
+                    attemptResult = (true, "")
+                } else {
+                    attemptResult = await runPlaylistAttempt(
+                        playlistURL: item.url,
+                        zotify: zotify,
+                        root: root,
+                        flag: flag
+                    )
+                }
                 await waitForTitlePrefetch(cancelFlag: flag)
 
                 if skipPlaylistFlag.value || (queueItems.indices.contains(idx) && queueItems[idx].status == .cancelled) {
@@ -1921,6 +1927,19 @@ final class DownloadService: ObservableObject {
                 ensureSongCapacity(preview.trackCount)
                 totalExpected = preview.trackCount
             }
+            if listIsNonEmpty {
+                trackListReady = true
+            }
+            if titlePrefetchToken == token {
+                titlePrefetchInFlight = false
+            }
+            if queueItems.indices.contains(currentQueueIndex) {
+                if preview.trackCount > queueItems[currentQueueIndex].trackCount {
+                    queueItems[currentQueueIndex].trackCount = preview.trackCount
+                }
+                let playlistName = queueItems[currentQueueIndex].name
+                applyLiveDiskProgress(root: musicRoot, playlistName: playlistName)
+            }
         }
     }
 
@@ -2102,7 +2121,7 @@ final class DownloadService: ObservableObject {
         guard isRunning, !libraryCheckComplete.value else { return }
         guard !cancelFlag.value, !skipPlaylistFlag.value else { return }
         switch downloadPhase {
-        case .checkingExisting, .downloading, .starting:
+        case .checkingExisting, .downloading, .starting, .retrying:
             break
         default:
             return
@@ -2139,7 +2158,9 @@ final class DownloadService: ObservableObject {
         }
 
         libraryCheckComplete.value = true
+        retryStatusMessage = "All songs already on disk"
         downloadSpeedLabel = "All songs already on disk"
+        statusMessage = "All songs already on disk"
         appendLog("Library check complete — \(songItems.count) songs already resolved. Stopping download early.")
         killOrphanZotifyProcessesAsync(source: "libraryComplete")
     }
@@ -2468,8 +2489,16 @@ final class DownloadService: ObservableObject {
             awaitingSpotifyLogin.value = false
             // Do NOT set reauthHandoff here — that wiped fresh credentials and broke login
             // (LOGIN FAILED → signIn deletes creds → ConnectionResetError loop).
-            downloadSpeedLabel = "Spotify session error — retrying…"
-            setPhase(.retrying)
+            let alreadyHere = trackListReady && !titlePrefetchInFlight
+                && !songItems.isEmpty
+                && songItems.allSatisfy { $0.status == .done || $0.status == .skipped }
+            if alreadyHere {
+                maybeShortCircuitLibraryCheck()
+            }
+            if !libraryCheckComplete.value {
+                downloadSpeedLabel = "Spotify session error — retrying…"
+                setPhase(.retrying)
+            }
         }
 
         if let match = line.range(of: #"Total Query Progress:\s*(\d+)\s*/\s*(\d+)"#, options: .regularExpression) {

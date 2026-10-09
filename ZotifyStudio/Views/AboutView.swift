@@ -8,7 +8,7 @@ struct AboutView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Oz Downloader")
                         .font(.largeTitle.bold())
-                    Text("v0.2.0")
+                    Text("v2.1.0")
                         .font(.title3.weight(.medium))
                         .foregroundStyle(.secondary)
                     Text("Download your Spotify playlists to this Mac — simply.")
@@ -35,6 +35,8 @@ struct AboutView: View {
                         .font(.headline)
                     Link("mailosman.dev@gmail.com", destination: URL(string: "mailto:mailosman.dev@gmail.com")!)
                     Link("instagram.com/oz.suliman", destination: URL(string: "https://www.instagram.com/oz.suliman/")!)
+                    Link("Portfolio — osmandev.me", destination: URL(string: "https://osmandev.me/")!)
+                    Link("DJ — osmandev.me/dj", destination: URL(string: "https://osmandev.me/dj")!)
                 }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -177,6 +177,14 @@ enum ZotifyCLI {
     }
 
     @discardableResult
+    /// zotify's "Logging in..." spinner reprints every tick and is not download progress.
+    private static func isLoginSpinner(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if trimmed.contains("logging in") { return true }
+        let scalars = trimmed.unicodeScalars.filter { !CharacterSet.whitespacesAndNewlines.contains($0) }
+        return !scalars.isEmpty && scalars.allSatisfy { (0x2800...0x28FF).contains($0.value) }
+    }
+
     static func run(
         executable: URL,
         arguments: [String],
@@ -245,7 +253,10 @@ enum ZotifyCLI {
                     carry.removeFirst()
                 }
                 if !line.isEmpty {
-                    bumpBeat()
+                    // The login spinner reprints forever and would hide a stuck session.
+                    if !Self.isLoginSpinner(line) {
+                        bumpBeat()
+                    }
                     DispatchQueue.main.async { onLine?(line) }
                 }
             }

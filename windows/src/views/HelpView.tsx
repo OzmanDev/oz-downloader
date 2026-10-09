@@ -1,10 +1,12 @@
 import React from 'react';
-import { Mail, Instagram } from 'lucide-react';
+import { Mail, Instagram, Globe, Music } from 'lucide-react';
 import { downloadService } from '../services/downloadService';
 
 export const HelpView: React.FC = () => {
   const email = 'mailosman.dev@gmail.com';
   const instagramURL = 'https://www.instagram.com/oz.suliman/';
+  const portfolioURL = 'https://osmandev.me/';
+  const djPortfolioURL = 'https://osmandev.me/dj';
 
   const copyEmail = () => {
     const api = (window as any).electronAPI;
@@ -16,12 +18,12 @@ export const HelpView: React.FC = () => {
     downloadService.showToast('Email copied');
   };
 
-  const openInstagram = () => {
+  const openLink = (url: string) => {
     const api = (window as any).electronAPI;
     if (api) {
-      api.openExternal(instagramURL);
+      api.openExternal(url);
     } else {
-      window.open(instagramURL, '_blank');
+      window.open(url, '_blank');
     }
   };
 
@@ -29,7 +31,7 @@ export const HelpView: React.FC = () => {
     <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6 max-w-2xl">
       <div>
         <h1 className="text-2xl font-bold text-white tracking-tight">Oz Downloader</h1>
-        <div className="text-sm font-medium text-neutral-400 mt-1">v0.2.0</div>
+        <div className="text-sm font-medium text-neutral-400 mt-1">v2.1.0</div>
         <p className="text-sm text-neutral-400 mt-1">
           Download your Spotify playlists to this PC — simply.
         </p>
@@ -85,11 +87,27 @@ export const HelpView: React.FC = () => {
           </button>
 
           <button
-            onClick={openInstagram}
+            onClick={() => openLink(instagramURL)}
             className="flex items-center gap-2 text-xs text-sky-400 hover:text-sky-300 font-medium transition w-fit"
           >
             <Instagram className="w-4 h-4" />
             <span>instagram.com/oz.suliman</span>
+          </button>
+
+          <button
+            onClick={() => openLink(portfolioURL)}
+            className="flex items-center gap-2 text-xs text-sky-400 hover:text-sky-300 font-medium transition w-fit"
+          >
+            <Globe className="w-4 h-4" />
+            <span>Portfolio — osmandev.me</span>
+          </button>
+
+          <button
+            onClick={() => openLink(djPortfolioURL)}
+            className="flex items-center gap-2 text-xs text-sky-400 hover:text-sky-300 font-medium transition w-fit"
+          >
+            <Music className="w-4 h-4" />
+            <span>DJ — osmandev.me/dj</span>
           </button>
         </div>
       </div>

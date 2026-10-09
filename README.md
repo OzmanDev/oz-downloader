@@ -2,7 +2,7 @@
 
 Native macOS app for downloading Spotify playlists, albums, and tracks. Converts to FLAC (or other formats), tags files, and organizes them into playlist folders.
 
-**Version:** 0.2.0 · **Bundle ID:** `com.oz.downloader` · **Minimum macOS:** 13.0
+**Version:** 2.1.0 · **Bundle ID:** `com.oz.downloader` · **Minimum macOS:** 13.0
 
 ---
 
@@ -143,3 +143,5 @@ See **[E2E_TEST_PLAN.md](./E2E_TEST_PLAN.md)** for the end-to-end test plan.
 
 - Email: mailosman.dev@gmail.com  
 - Instagram: @oz.suliman  
+- Portfolio: https://osmandev.me/  
+- DJ: https://osmandev.me/dj  

@@ -118,6 +118,40 @@ struct PlaylistsView: View {
         !selectedFetched.isEmpty || !selectedSaved.isEmpty
     }
 
+    private var selectedSavedPlaylists: [SavedPlaylist] {
+        store.playlists.filter { selectedSaved.contains($0.alias) }
+    }
+
+    /// A selected On Spotify row that is not already in Saved here.
+    private var hasUnsavedSelection: Bool {
+        let savedURLs = Set(store.playlists.map { AppStore.normalizeSpotifyURL($0.url) })
+        return fetched.contains { pl in
+            selectedFetched.contains(pl.id)
+                && !savedURLs.contains(AppStore.normalizeSpotifyURL(pl.url))
+        }
+    }
+
+    private var canFixSavedLists: Bool {
+        !selectedSavedPlaylists.isEmpty
+            && !hasUnsavedSelection
+            && !downloads.isRunning
+            && !downloads.isRefreshingTags
+            && !downloads.isSigningIn
+    }
+
+    private var fixSavedListsHelp: String {
+        if downloads.isRunning || downloads.isRefreshingTags || downloads.isSigningIn {
+            return "Wait for the current job to finish."
+        }
+        if hasUnsavedSelection {
+            return "Select playlists under Saved here. This stays off while an unsaved Spotify list is selected."
+        }
+        if selectedSavedPlaylists.isEmpty {
+            return "Select one or more playlists under Saved here."
+        }
+        return "Look up the artist, album, year, and genre for the selected saved playlists."
+    }
+
     private var toolbar: some View {
         HStack(spacing: 10) {
             if store.isLoggedIn {
@@ -136,6 +170,18 @@ struct PlaylistsView: View {
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("playlists.downloadSelected")
             }
+
+            Button {
+                let names = selectedSavedPlaylists.map(\.name)
+                Task {
+                    await downloads.refetchLocalTags(settings: store.settings, playlistNames: names)
+                }
+            } label: {
+                Label("Fix names and tags", systemImage: "tag")
+            }
+            .disabled(!canFixSavedLists)
+            .help(fixSavedListsHelp)
+            .accessibilityIdentifier("playlists.fixSavedTags")
 
             Spacer()
 

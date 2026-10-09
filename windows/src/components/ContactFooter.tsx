@@ -1,10 +1,12 @@
 import React from 'react';
-import { Mail, Instagram } from 'lucide-react';
+import { Mail, Instagram, Globe, Music } from 'lucide-react';
 import { downloadService } from '../services/downloadService';
 
 export const ContactFooter: React.FC = () => {
   const email = 'mailosman.dev@gmail.com';
   const instagramURL = 'https://www.instagram.com/oz.suliman/';
+  const portfolioURL = 'https://osmandev.me/';
+  const djPortfolioURL = 'https://osmandev.me/dj';
 
   const copyEmail = () => {
     const api = (window as any).electronAPI;
@@ -16,18 +18,18 @@ export const ContactFooter: React.FC = () => {
     downloadService.showToast('Email copied');
   };
 
-  const openInstagram = () => {
+  const openLink = (url: string) => {
     const api = (window as any).electronAPI;
     if (api) {
-      api.openExternal(instagramURL);
+      api.openExternal(url);
     } else {
-      window.open(instagramURL, '_blank');
+      window.open(url, '_blank');
     }
   };
 
   return (
     <footer className="h-9 px-4 flex items-center justify-between bg-[#2c2c2e]/40 border-t border-white/5 text-xs text-neutral-400 select-none">
-      <div>Oz Downloader v0.2.0 · made with ❤️ by Oz</div>
+      <div>Oz Downloader v2.1.0 · made with ❤️ by Oz</div>
 
       <div className="flex items-center gap-4">
         <button
@@ -40,12 +42,30 @@ export const ContactFooter: React.FC = () => {
         </button>
 
         <button
-          onClick={openInstagram}
+          onClick={() => openLink(instagramURL)}
           className="flex items-center gap-1.5 hover:text-neutral-200 transition"
           title="instagram.com/oz.suliman"
         >
           <Instagram className="w-3.5 h-3.5" />
           <span>@oz.suliman</span>
+        </button>
+
+        <button
+          onClick={() => openLink(portfolioURL)}
+          className="flex items-center gap-1.5 hover:text-neutral-200 transition"
+          title="osmandev.me"
+        >
+          <Globe className="w-3.5 h-3.5" />
+          <span>Portfolio</span>
+        </button>
+
+        <button
+          onClick={() => openLink(djPortfolioURL)}
+          className="flex items-center gap-1.5 hover:text-neutral-200 transition"
+          title="osmandev.me/dj"
+        >
+          <Music className="w-3.5 h-3.5" />
+          <span>DJ</span>
         </button>
       </div>
     </footer>
