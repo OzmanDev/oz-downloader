@@ -78,6 +78,12 @@ if (Test-Path $PatchOAuth) {
     & $PyExe $PatchOAuth
 }
 
+$PatchAuth = Join-Path $Root "scripts\patch_auth_deadlock.py"
+if (Test-Path $PatchAuth) {
+    Write-Host "==> Applying librespot login deadlock patch"
+    & $PyExe $PatchAuth
+}
+
 $PatchSkip = Join-Path $Root "scripts\patch_skip_existing.py"
 if (-not (Test-Path $PatchSkip) -and $env:ZOTIFY_TOOLS) {
     $PatchSkip = Join-Path $env:ZOTIFY_TOOLS "scripts\patch_skip_existing.py"

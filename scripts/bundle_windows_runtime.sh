@@ -54,6 +54,11 @@ if [[ -f "${ZOTIFY_TOOLS}/scripts/patch_oauth.py" ]]; then
   PYTHONNOUSERSITE=1 "${PYBIN}" "${ZOTIFY_TOOLS}/scripts/patch_oauth.py" || echo "WARNING: OAuth patch failed"
 fi
 
+if [[ -f "${ROOT}/scripts/patch_auth_deadlock.py" ]]; then
+  echo "==> Applying librespot login deadlock patch"
+  PYTHONNOUSERSITE=1 "${PYBIN}" "${ROOT}/scripts/patch_auth_deadlock.py" || echo "WARNING: auth deadlock patch failed"
+fi
+
 if [[ -f "${ZOTIFY_TOOLS}/scripts/patch_skip_existing.py" ]]; then
   echo "==> Applying skip-existing patch"
   PYTHONNOUSERSITE=1 "${PYBIN}" "${ZOTIFY_TOOLS}/scripts/patch_skip_existing.py" || echo "WARNING: skip-existing patch failed"
