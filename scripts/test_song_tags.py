@@ -115,6 +115,18 @@ class DecideMetadataTests(unittest.TestCase):
         self.assertEqual(title, "7")
         self.assertIs(require_feature_match, False)
 
+    def test_index_filename_does_not_replace_real_tag_title(self):
+        track, artist, title, require_feature_match = decide_metadata(
+            "66",
+            "Bizarrap & Shakira",
+            "Shakira: Bzrp Music Sessions, Vol. 53",
+            "Las Mujeres Ya No Lloran",
+        )
+        self.assertIsNone(track)
+        self.assertEqual(artist, "Bizarrap & Shakira")
+        self.assertEqual(title, "Shakira: Bzrp Music Sessions, Vol. 53")
+        self.assertIs(require_feature_match, False)
+
     def test_leading_index_is_the_track_number(self):
         track, artist, title, require_feature_match = decide_metadata(
             "66_Shakira: Bzrp Music Sessions, Vol. 53",
@@ -137,6 +149,54 @@ class DecideMetadataTests(unittest.TestCase):
         self.assertEqual(track, 1)
         self.assertEqual(artist, "Shakira")
         self.assertEqual(title, "Hips Don't Lie")
+        self.assertIs(require_feature_match, False)
+
+    def test_playlist_filename_keeps_real_artist_and_featured_title(self):
+        track, artist, title, require_feature_match = decide_metadata(
+            "02_Fat Joe_What's Luv (feat. Ashanti)",
+            "",
+            "",
+            "",
+        )
+        self.assertEqual(track, 2)
+        self.assertEqual(artist, "Fat Joe")
+        self.assertEqual(title, "What's Luv (feat. Ashanti)")
+        self.assertIs(require_feature_match, False)
+
+    def test_leading_playlist_number_and_trailing_index_is_the_song_name(self):
+        track, artist, title, require_feature_match = decide_metadata(
+            "01_Song Name_66",
+            "",
+            "",
+            "",
+        )
+        self.assertEqual(track, 1)
+        self.assertEqual(artist, "")
+        self.assertEqual(title, "Song Name")
+        self.assertIs(require_feature_match, False)
+
+    def test_extra_tag_strings_keep_the_filename_song_name(self):
+        track, artist, title, require_feature_match = decide_metadata(
+            "01_Song Name_66",
+            "Other Artist",
+            "Other Title",
+            "",
+        )
+        self.assertEqual(track, 1)
+        self.assertEqual(artist, "Other Artist")
+        self.assertEqual(title, "Song Name")
+        self.assertIs(require_feature_match, False)
+
+    def test_leading_playlist_number_and_trailing_index_keeps_apostrophe_title(self):
+        track, artist, title, require_feature_match = decide_metadata(
+            "01_What's Luv_66",
+            "",
+            "",
+            "",
+        )
+        self.assertEqual(track, 1)
+        self.assertEqual(artist, "")
+        self.assertEqual(title, "What's Luv")
         self.assertIs(require_feature_match, False)
 
     def test_empty_stem_and_tags_have_no_artist_or_title(self):

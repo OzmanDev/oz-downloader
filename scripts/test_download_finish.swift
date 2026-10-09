@@ -39,6 +39,36 @@ enum TestDownloadFinish {
         if markDoneEmpty != true {
             failures.append("10. empty rows: mayMarkPlaylistDone expected true, got \(markDoneEmpty)")
         }
+        let stopEarlyWithFailed = DownloadFinish.mayStopEarly(
+            trackListReady: true,
+            rows: [.finished, .failed]
+        )
+        if stopEarlyWithFailed != false {
+            failures.append("11. track list ready, a failed row among finished: mayStopEarly expected false, got \(stopEarlyWithFailed)")
+        }
+        let markDoneAllFailed = DownloadFinish.mayMarkPlaylistDone(rows: [.failed])
+        if markDoneAllFailed != false {
+            failures.append("12. every row failed: mayMarkPlaylistDone expected false, got \(markDoneAllFailed)")
+        }
+        let markDoneMixedFailed = DownloadFinish.mayMarkPlaylistDone(rows: [.finished, .failed])
+        if markDoneMixedFailed != false {
+            failures.append("13. a failed row among finished: mayMarkPlaylistDone expected false, got \(markDoneMixedFailed)")
+        }
+        let stopEarlyNotReadyFailed = DownloadFinish.mayStopEarly(trackListReady: false, rows: [.failed])
+        if stopEarlyNotReadyFailed != false {
+            failures.append("14. track list not ready, one failed row: mayStopEarly expected false, got \(stopEarlyNotReadyFailed)")
+        }
+        let markDoneWaitingFailed = DownloadFinish.mayMarkPlaylistDone(rows: [.waiting, .failed])
+        if markDoneWaitingFailed != false {
+            failures.append("15. waiting and failed rows: mayMarkPlaylistDone expected false, got \(markDoneWaitingFailed)")
+        }
+        let stopEarlyInProgressFailed = DownloadFinish.mayStopEarly(
+            trackListReady: true,
+            rows: [.inProgress, .failed]
+        )
+        if stopEarlyInProgressFailed != false {
+            failures.append("16. track list ready, inProgress and failed rows: mayStopEarly expected false, got \(stopEarlyInProgressFailed)")
+        }
 
         if failures.isEmpty {
             return

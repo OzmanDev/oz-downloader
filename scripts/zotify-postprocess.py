@@ -140,6 +140,16 @@ def decide_metadata(
         if not missing_artist(cleaned_artist):
             artist = cleaned_artist
 
+    # A filename that is only a track index must not replace a real title already in the tags.
+    if (
+        re.fullmatch(r"\d{1,3}", parsed_title or "")
+        and cleaned_title
+        and not re.fullmatch(r"\d{1,3}", cleaned_title)
+    ):
+        title = cleaned_title
+        if not missing_artist(cleaned_artist):
+            artist = cleaned_artist
+
     # A feature credit stored as the title is not the song name, and the song name is not the artist.
     if is_feat_fragment(title) and not is_feat_fragment(artist) and not missing_artist(artist):
         title = f"{artist} {title}".strip()
@@ -356,7 +366,11 @@ def parse_name(stem: str):
         joined = _join_split_credit(m.group(2), m.group(3))
         if joined:
             return int(m.group(1)), "", joined
-        return int(m.group(1)), m.group(2), m.group(3)
+        left, right = m.group(2), m.group(3)
+        # "01_Song Name_66": the right side is a playlist index, not the title.
+        if re.fullmatch(r"\d{1,3}", right) and not re.fullmatch(r"\d{1,3}", left):
+            return int(m.group(1)), "", left
+        return int(m.group(1)), left, right
     # Playlist with missing artist: 01__Title or 01_Title
     m = re.match(r"^(\d{2})__(.+)$", stem)
     if m:

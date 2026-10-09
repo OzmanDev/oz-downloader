@@ -1427,8 +1427,10 @@ final class DownloadService: ObservableObject {
                 return .waiting
             case .downloading:
                 return .inProgress
-            case .done, .skipped, .failed:
+            case .done, .skipped:
                 return .finished
+            case .failed:
+                return .failed
             }
         }
     }

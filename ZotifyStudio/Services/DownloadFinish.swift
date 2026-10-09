@@ -2,6 +2,7 @@ enum TrackRowState {
     case waiting
     case inProgress
     case finished
+    case failed
 }
 
 enum DownloadFinish {

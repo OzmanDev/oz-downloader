@@ -17,6 +17,8 @@ Both buttons run `scripts/zotify-postprocess.py` on a playlist folder. Convert o
 - A feature credit stored as the title, with the song name stored as the artist, is rebuilt into the song title. The artist is filled only by a lookup that mentions those featured names.
 - A normal title that already contains a feature credit, with a real artist, is left as it is.
 - A filename or title that is only a track index is not the song title when the song name is in the artist field or in the album before a trailing `/number`.
+- A leading playlist number does not change that. `01_Song Name_66` is track 1 and title `Song Name`, the same as `Song Name_66`. When that filename has no artist, a tag artist is kept. The tag text must not replace the recovered song name.
+- A filename that is only a track index must not replace tags that already hold a real title. Refetch of a file named `66` whose tags already name the song keeps that title and artist.
 - A real numeric title with an artist that is not inside that album prefix stays as it is (`7` by Drake on `Scorpion`).
 - Spotify having no genre does not block iTunes. An empty result stays empty.
 
@@ -30,6 +32,8 @@ Dj Afro under Saved here listed 92 songs. Spotify listed 105. Progress showed 92
 - If Spotify’s list is longer than the saved copy, those extra songs must be downloaded before the job can finish.
 - A title lookup that fails or comes back empty is not a ready track list. The download keeps going.
 - After the last retry, a row that is still Waiting is Failed, not left Waiting.
+- **Failed**: a progress row that did not download. It is not finished.
+- Do not stop the download early, and do not mark the playlist Done, while any row is Failed.
 
 ## Seam
 
