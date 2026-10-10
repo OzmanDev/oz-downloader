@@ -32,6 +32,8 @@ struct ContentView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
+            OrbBackgroundView()
+
             VStack(spacing: 0) {
                 customTabBar
                     .padding(.top, 10)
