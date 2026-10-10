@@ -14,6 +14,7 @@
 		F4443D1962BE4693AB7C987F /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13716CF0AA2747809054C661 /* AppStore.swift */; };
 		8A1C4E7B2D904F6A91B3C5E8 /* SavedPlaylistCount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D2F8A6C1B474E90A7C3D9F1 /* SavedPlaylistCount.swift */; };
 		392A9AB3302D75BC6956C590 /* WhatsNew.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE8DA364890CDEDA089258DF /* WhatsNew.swift */; };
+		8E2D6F0A4C1B49A7B5D3E8F1 /* PlaylistDebugLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A91E7B2F5846D0A1B3C5E7 /* PlaylistDebugLog.swift */; };
 		DA66D20ECCA042D0AC522B7B /* ZotifyCLI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07888CC4313843BD85D68385 /* ZotifyCLI.swift */; };
 		48EF2940EB4C44679FCBCD26 /* DownloadService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 333CEB835A8143A4AE1EBF6F /* DownloadService.swift */; };
 		59EBE042C603458481CB2707 /* DownloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04CD267C7BEB487ABCE321AC /* DownloadView.swift */; };
@@ -40,6 +41,7 @@
 		13716CF0AA2747809054C661 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 		5D2F8A6C1B474E90A7C3D9F1 /* SavedPlaylistCount.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedPlaylistCount.swift; sourceTree = "<group>"; };
 		FE8DA364890CDEDA089258DF /* WhatsNew.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNew.swift; sourceTree = "<group>"; };
+		C4A91E7B2F5846D0A1B3C5E7 /* PlaylistDebugLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistDebugLog.swift; sourceTree = "<group>"; };
 		07888CC4313843BD85D68385 /* ZotifyCLI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZotifyCLI.swift; sourceTree = "<group>"; };
 		333CEB835A8143A4AE1EBF6F /* DownloadService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadService.swift; sourceTree = "<group>"; };
 		04CD267C7BEB487ABCE321AC /* DownloadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadView.swift; sourceTree = "<group>"; };
@@ -122,6 +124,7 @@
 				13716CF0AA2747809054C661 /* AppStore.swift */,
 				5D2F8A6C1B474E90A7C3D9F1 /* SavedPlaylistCount.swift */,
 				FE8DA364890CDEDA089258DF /* WhatsNew.swift */,
+				C4A91E7B2F5846D0A1B3C5E7 /* PlaylistDebugLog.swift */,
 				07888CC4313843BD85D68385 /* ZotifyCLI.swift */,
 				333CEB835A8143A4AE1EBF6F /* DownloadService.swift */,
 			);
@@ -282,6 +285,7 @@
 				F4443D1962BE4693AB7C987F /* AppStore.swift in Sources */,
 				8A1C4E7B2D904F6A91B3C5E8 /* SavedPlaylistCount.swift in Sources */,
 				392A9AB3302D75BC6956C590 /* WhatsNew.swift in Sources */,
+				8E2D6F0A4C1B49A7B5D3E8F1 /* PlaylistDebugLog.swift in Sources */,
 				DA66D20ECCA042D0AC522B7B /* ZotifyCLI.swift in Sources */,
 				48EF2940EB4C44679FCBCD26 /* DownloadService.swift in Sources */,
 				59EBE042C603458481CB2707 /* DownloadView.swift in Sources */,

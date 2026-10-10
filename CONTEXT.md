@@ -15,3 +15,4 @@
 - **Filtered**: the song matched a skip filter.
 - **What's new**: the notes shown the first time this version of the app is opened.
 - **Done with failures**: the finish line when the download and convert have finished and at least one song was not saved. It is not the all-done celebration.
+- **Playlist debug log**: a small file in a playlist folder after a download. It records how many songs downloaded, skipped, or failed, and the outcome of the ones that were not downloaded. It has no account, path, or link data, and the app does not send it.

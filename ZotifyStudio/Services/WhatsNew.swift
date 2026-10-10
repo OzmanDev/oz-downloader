@@ -1,13 +1,14 @@
 import Foundation
 
 enum WhatsNew {
-    static let version = "2.1.1"
-    static let title = "What's new in v2.1.1"
+    static let version = "2.1.2"
+    static let title = "What's new in v2.1.2"
     static let lines = [
         "Refetch names and tags on playlists you already saved.",
         "Progress shows each song as it waits, downloads, skips, or finishes.",
         "Convert writes cleaner titles, lyrics, and tags.",
         "The layout for Get Music and your playlists is clearer.",
+        "Each playlist saves a small debug log. It keeps only the minimum needed to investigate, leaves private data out, and is never shared unless you choose to send it.",
     ]
     static let continueTitle = "Continue"
 

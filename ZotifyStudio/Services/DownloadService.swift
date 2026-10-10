@@ -1228,6 +1228,8 @@ final class DownloadService: ObservableObject {
                 appendLog("Gave up on “\(item.name)” after \(maxAttempts) tries.")
                 showToast("Failed — \(item.name)", duration: 5)
             }
+
+            writePlaylistDebugLog(playlistName: item.name, root: root)
         }
 
         if flag.value {
@@ -2036,6 +2038,51 @@ final class DownloadService: ObservableObject {
             }
         }
         return paths
+    }
+
+    private func writePlaylistDebugLog(playlistName: String, root: String) {
+        let clean = Self.sanitizePlaylistFolderName(playlistName)
+        guard !clean.isEmpty else { return }
+        let folder = URL(fileURLWithPath: root).appendingPathComponent(clean)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let songs = songItems.map { item in
+            PlaylistDebugSong(
+                number: item.number,
+                outcome: Self.playlistDebugOutcome(item.status),
+                detail: Self.playlistDebugDetail(reasonLabel: item.reasonLabel, skipReason: item.skipReason)
+            )
+        }
+        let body = PlaylistDebugLog.text(version: WhatsNew.version, songs: songs)
+        try? body.write(to: PlaylistDebugLog.fileURL(playlistFolder: folder), atomically: true, encoding: .utf8)
+    }
+
+    private static func playlistDebugOutcome(_ status: SongDownloadItem.Status) -> String {
+        switch status {
+        case .done:
+            return "downloaded"
+        case .skipped:
+            return "skipped"
+        case .failed:
+            return "failed"
+        case .pending, .downloading:
+            return "waiting"
+        }
+    }
+
+    private static func playlistDebugDetail(reasonLabel: String, skipReason: SongDownloadItem.SkipReason) -> String {
+        if !reasonLabel.isEmpty { return reasonLabel }
+        switch skipReason {
+        case .alreadySaved:
+            return "Already here"
+        case .duplicate:
+            return "Duplicate"
+        case .cancelled:
+            return "Cancelled"
+        case .filtered:
+            return "Filtered"
+        case .none:
+            return ""
+        }
     }
 
     /// Strip quotes / path junk so folder names stay valid (embed HTML used to leave a trailing `"`).
