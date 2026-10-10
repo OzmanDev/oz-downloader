@@ -17,3 +17,4 @@
 - **Done with failures**: the finish line when the download and convert have finished and at least one song was not saved. It is not the all-done celebration.
 - **Playlist debug log**: a small file in a playlist folder after a download. It records how many songs downloaded, skipped, or failed, and the outcome of the ones that were not downloaded. It has no account, path, or link data, and the app does not send it.
 - **Orb background**: three dim circles behind every Mac screen. They drift on their own. The cards and the What’s new sheet stay solid on top of them.
+- **Download selected**: the My Playlists button that downloads the playlists that are selected. It stays on screen. It is off when nothing is selected, and on when a playlist is selected.

@@ -165,11 +165,10 @@ struct PlaylistsView: View {
                 .accessibilityIdentifier("playlists.refresh")
             }
 
-            if hasDownloadSelection {
-                Button(downloads.hasActiveDownload ? "Add selected to queue" : "Download selected") { downloadSelected() }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier("playlists.downloadSelected")
-            }
+            Button(downloads.hasActiveDownload && hasDownloadSelection ? "Add selected to queue" : "Download selected") { downloadSelected() }
+                .buttonStyle(.borderedProminent)
+                .disabled(!hasDownloadSelection)
+                .accessibilityIdentifier("playlists.downloadSelected")
 
             Button {
                 let names = selectedSavedPlaylists.map(\.name)
