@@ -16,13 +16,13 @@ enum TestOrbField {
 
         for drift in field {
             let traveled = distance(drift.startX, drift.startY, drift.endX, drift.endY)
-            if traveled <= 120 {
-                failures.append("2. \(drift.hue) start-to-end distance should be greater than 120, got \(traveled)")
+            if traveled <= 240 {
+                failures.append("2. \(drift.hue) start-to-end distance should be greater than 240, got \(traveled)")
             }
             if drift.seconds <= 0 {
                 failures.append("3. \(drift.hue) seconds should be greater than 0, got \(drift.seconds)")
-            } else if traveled / drift.seconds >= 30 {
-                failures.append("3. \(drift.hue) speed should be less than 30 points a second, got \(traveled / drift.seconds)")
+            } else if traveled / drift.seconds <= 60 {
+                failures.append("3. \(drift.hue) speed should be more than 60 points a second, got \(traveled / drift.seconds)")
             }
         }
 
@@ -80,8 +80,8 @@ enum TestOrbField {
         }
 
         for drift in field {
-            if drift.seconds < 8 {
-                failures.append("12. \(drift.hue) seconds should be at least 8, got \(drift.seconds)")
+            if drift.seconds > 4 {
+                failures.append("12. \(drift.hue) seconds should be at most 4, got \(drift.seconds)")
             }
         }
 

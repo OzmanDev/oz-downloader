@@ -16,25 +16,25 @@ enum OrbField {
                 hue: "blue",
                 startX: width * 0.22,
                 startY: height * 0.28,
-                endX: width * 0.22 + 121,
+                endX: width * 0.22 + 280,
                 endY: height * 0.28,
-                seconds: 8
+                seconds: 3.5
             ),
             OrbDrift(
                 hue: "violet",
                 startX: width * 0.78,
                 startY: height * 0.32,
-                endX: width * 0.78 - 121,
+                endX: width * 0.78 - 280,
                 endY: height * 0.32,
-                seconds: 8
+                seconds: 3.5
             ),
             OrbDrift(
                 hue: "teal",
                 startX: width * 0.48,
                 startY: height * 0.72,
                 endX: width * 0.48,
-                endY: height * 0.72 - 121,
-                seconds: 8
+                endY: height * 0.72 - 280,
+                seconds: 3.5
             ),
         ]
     }
