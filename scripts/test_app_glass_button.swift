@@ -14,14 +14,14 @@ enum TestAppGlassButton {
             failures.append("2. a disabled button should sit at half opacity or below, got \(off)")
         }
 
-        if AppGlassButtonLook.strokeIsAccent(isEnabled: false, prominent: true) {
-            failures.append("3. a disabled prominent button should not use the accent stroke")
+        if !AppGlassButtonLook.strokeIsAccent(isEnabled: false, prominent: true) {
+            failures.append("3. a disabled button should use the same accent stroke")
         }
         if !AppGlassButtonLook.strokeIsAccent(isEnabled: true, prominent: true) {
             failures.append("4. an enabled prominent button should use the accent stroke")
         }
-        if AppGlassButtonLook.strokeIsAccent(isEnabled: true, prominent: false) {
-            failures.append("5. an enabled plain button should not use the accent stroke")
+        if !AppGlassButtonLook.strokeIsAccent(isEnabled: true, prominent: false) {
+            failures.append("5. an enabled plain button should use the same accent stroke")
         }
 
         if failures.isEmpty {

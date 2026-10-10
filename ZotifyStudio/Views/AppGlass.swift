@@ -28,7 +28,7 @@ enum AppGlassButtonLook {
     }
 
     static func strokeIsAccent(isEnabled: Bool, prominent: Bool) -> Bool {
-        isEnabled && prominent
+        true
     }
 }
 
@@ -37,8 +37,9 @@ private struct AppGlassButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
-        let accent = AppGlassButtonLook.strokeIsAccent(isEnabled: isEnabled, prominent: prominent)
-        let stroke = accent ? Color.accentColor.opacity(0.95) : Color.secondary.opacity(isEnabled ? 0.55 : 0.28)
+        let border = AppGlassButtonLook.strokeIsAccent(isEnabled: isEnabled, prominent: prominent)
+            ? Color.accentColor.opacity(0.95)
+            : Color.accentColor.opacity(0.95)
         configuration.label
             .foregroundStyle(isEnabled ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
             .padding(.horizontal, 12)
@@ -49,7 +50,7 @@ private struct AppGlassButtonStyle: ButtonStyle {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(stroke, lineWidth: accent ? 1.5 : 1)
+                    .stroke(border, lineWidth: 1.5)
             )
             .opacity(AppGlassButtonLook.opacity(isEnabled: isEnabled, isPressed: configuration.isPressed))
     }
