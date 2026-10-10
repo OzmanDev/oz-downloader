@@ -380,7 +380,16 @@ struct DownloadView: View {
         })
     }
 
+    @ViewBuilder
     private var failedSongsPopup: some View {
+        if #available(macOS 13.3, *) {
+            failedSongsPopupCard.presentationBackground(.regularMaterial)
+        } else {
+            failedSongsPopupCard
+        }
+    }
+
+    private var failedSongsPopupCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("What failed")
                 .font(.headline)
@@ -417,7 +426,6 @@ struct DownloadView: View {
         .padding(16)
         .frame(width: 340)
         .appGlassCard()
-        .presentationBackground(.regularMaterial)
     }
 
     private var celebrationBanner: some View {
