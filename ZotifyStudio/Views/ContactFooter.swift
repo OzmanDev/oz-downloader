@@ -37,7 +37,7 @@ struct ContactFooter: View {
                     if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                 }
 
-                footerLink(title: "@oz.suliman", systemImage: "camera", url: instagramURL, help: "instagram.com/oz.suliman", scale: 1)
+                footerLink(title: "@oz.suliman", systemImage: "camera", url: instagramURL, help: "instagram.com/oz.suliman", scale: highlight)
                 footerLink(title: "Portfolio", systemImage: "globe", url: portfolioURL, help: "osmandev.me", scale: highlight)
                 footerLink(title: "DJ", systemImage: "music.note", url: djPortfolioURL, help: "osmandev.me/dj", scale: highlight)
             }
