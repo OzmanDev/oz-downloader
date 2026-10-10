@@ -32,6 +32,7 @@ class DownloadServiceState {
   toastMessage: string = '';
   toastVisible: boolean = false;
   showCelebration: boolean = false;
+  finishFailureCount: number = 0;
   requestShowGetMusic: boolean = false;
   downloadErrorMessage: string = '';
 
@@ -225,6 +226,7 @@ class DownloadServiceState {
     this.isCancelled = false;
     this.downloadErrorMessage = '';
     this.showCelebration = false;
+    this.finishFailureCount = 0;
     this.convertFraction = 0;
     this.convertLabel = '';
     this.convertSkipped = false;
@@ -266,10 +268,12 @@ class DownloadServiceState {
           this.tabBadge = 'failure';
           this.statusMessage = 'Finished with errors';
           this.downloadPhase = 'idle';
+          this.finishFailureCount = this.songItems.filter((song) => song.status === 'failed').length;
         } else {
           this.tabBadge = 'success';
           this.statusMessage = 'Done';
           this.downloadPhase = 'idle';
+          this.finishFailureCount = 0;
           this.showCelebration = true;
           this.showFinishToast();
         }

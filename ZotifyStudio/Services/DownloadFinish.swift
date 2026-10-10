@@ -167,6 +167,22 @@ enum ProgressBoard {
     }
 }
 
+enum FinishBanner {
+    /// nil when there are no failures (the all-done celebration stays).
+    /// 1 → "done with 1 failure 😅👏🏾"
+    /// 2 or more → "done with \(count) failures 😅👏🏾"
+    /// 0 or negative → nil
+    static func failureLine(count: Int) -> String? {
+        if count == 1 {
+            return "done with 1 failure 😅👏🏾"
+        }
+        if count >= 2 {
+            return "done with \(count) failures 😅👏🏾"
+        }
+        return nil
+    }
+}
+
 enum DownloadFinish {
     static func mayStopEarly(trackListReady: Bool, rows: [TrackRowState]) -> Bool {
         trackListReady && !rows.isEmpty && rows.allSatisfy { $0 == .finished }

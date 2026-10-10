@@ -1,4 +1,4 @@
-import { classify, column, rowLabel, summary } from './downloadLineOutcome.ts';
+import { classify, column, failureLine, rowLabel, summary } from './downloadLineOutcome.ts';
 
 const failures: string[] = [];
 
@@ -247,6 +247,44 @@ if (reasonLabelWins !== 'Local file') {
   failures.push(
     `56. case 9 skipped row with reason label "Local file" and skipReason alreadySaved expected "Local file", got ${reasonLabelWins}`
   );
+}
+
+const oneFailure = failureLine(1);
+if (oneFailure !== 'done with 1 failure 😅👏🏾') {
+  failures.push(
+    `57. one failed song: failureLine expected "done with 1 failure 😅👏🏾", got ${JSON.stringify(oneFailure)}`
+  );
+}
+
+const twoFailures = failureLine(2);
+if (twoFailures !== 'done with 2 failures 😅👏🏾') {
+  failures.push(
+    `58. two failed songs: failureLine expected "done with 2 failures 😅👏🏾", got ${JSON.stringify(twoFailures)}`
+  );
+}
+
+const threeFailures = failureLine(3);
+if (threeFailures !== 'done with 3 failures 😅👏🏾') {
+  failures.push(
+    `62. three failed songs: failureLine expected "done with 3 failures 😅👏🏾", got ${JSON.stringify(threeFailures)}`
+  );
+}
+
+const manyFailures = failureLine(4);
+if (manyFailures !== 'done with 4 failures 😅👏🏾') {
+  failures.push(
+    `59. four failed songs: failureLine expected "done with 4 failures 😅👏🏾", got ${JSON.stringify(manyFailures)}`
+  );
+}
+
+const noFailures = failureLine(0);
+if (noFailures !== null) {
+  failures.push(`60. no failed songs: failureLine expected null, got ${JSON.stringify(noFailures)}`);
+}
+
+const negativeFailures = failureLine(-1);
+if (negativeFailures !== null) {
+  failures.push(`61. a negative count: failureLine expected null, got ${JSON.stringify(negativeFailures)}`);
 }
 
 if (failures.length > 0) {

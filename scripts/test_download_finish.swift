@@ -327,6 +327,36 @@ enum TestDownloadFinish {
             failures.append("56. case 9 skipped row with reason label \"Local file\" and skipReason alreadySaved expected \"Local file\", got \(reasonLabelWins)")
         }
 
+        let oneFailure = FinishBanner.failureLine(count: 1)
+        if oneFailure != "done with 1 failure 😅👏🏾" {
+            failures.append("57. one failed song: failureLine expected \"done with 1 failure 😅👏🏾\", got \(String(describing: oneFailure))")
+        }
+
+        let twoFailures = FinishBanner.failureLine(count: 2)
+        if twoFailures != "done with 2 failures 😅👏🏾" {
+            failures.append("58. two failed songs: failureLine expected \"done with 2 failures 😅👏🏾\", got \(String(describing: twoFailures))")
+        }
+
+        let threeFailures = FinishBanner.failureLine(count: 3)
+        if threeFailures != "done with 3 failures 😅👏🏾" {
+            failures.append("62. three failed songs: failureLine expected \"done with 3 failures 😅👏🏾\", got \(String(describing: threeFailures))")
+        }
+
+        let manyFailures = FinishBanner.failureLine(count: 4)
+        if manyFailures != "done with 4 failures 😅👏🏾" {
+            failures.append("59. four failed songs: failureLine expected \"done with 4 failures 😅👏🏾\", got \(String(describing: manyFailures))")
+        }
+
+        let noFailures = FinishBanner.failureLine(count: 0)
+        if noFailures != nil {
+            failures.append("60. no failed songs: failureLine expected nil, got \(String(describing: noFailures))")
+        }
+
+        let negativeFailures = FinishBanner.failureLine(count: -1)
+        if negativeFailures != nil {
+            failures.append("61. a negative count: failureLine expected nil, got \(String(describing: negativeFailures))")
+        }
+
         if failures.isEmpty {
             return
         }

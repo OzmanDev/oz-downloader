@@ -13,7 +13,7 @@ import { downloadService } from '../services/downloadService';
 import { linkPreviewService } from '../services/linkPreviewService';
 import { LinkPreviewCard } from '../components/LinkPreviewCard';
 import { SongDownloadItem } from '../types/downloads';
-import { rowLabel } from '../services/downloadLineOutcome';
+import { failureLine, rowLabel } from '../services/downloadLineOutcome';
 
 export const GetMusicView: React.FC = () => {
   const [urlsText, setUrlsText] = useState(linkPreviewService.urlsText);
@@ -27,6 +27,7 @@ export const GetMusicView: React.FC = () => {
   const [statusMessage, setStatusMessage] = useState(downloadService.statusMessage);
   const [downloadRate, setDownloadRate] = useState(downloadService.downloadRate);
   const [showCelebration, setShowCelebration] = useState(downloadService.showCelebration);
+  const [finishFailureCount, setFinishFailureCount] = useState(downloadService.finishFailureCount);
   const [phaseLabel, setPhaseLabel] = useState(downloadService.phaseStatusLabel);
   const [phaseSummary, setPhaseSummary] = useState(downloadService.phaseProgressSummary);
   const [convertFraction, setConvertFraction] = useState(downloadService.convertFraction);
@@ -55,6 +56,7 @@ export const GetMusicView: React.FC = () => {
       setStatusMessage(downloadService.statusMessage);
       setDownloadRate(downloadService.downloadRate);
       setShowCelebration(downloadService.showCelebration);
+      setFinishFailureCount(downloadService.finishFailureCount);
       setPhaseLabel(downloadService.phaseStatusLabel);
       setPhaseSummary(downloadService.phaseProgressSummary);
       setConvertFraction(downloadService.convertFraction);
@@ -178,6 +180,8 @@ export const GetMusicView: React.FC = () => {
     return statusMessage;
   })();
 
+  const doneWithFailures = failureLine(finishFailureCount);
+
   const summaryText = (() => {
     if (showCelebration) return '';
     if (isConverting) return convertLabel || phaseSummary;
@@ -272,6 +276,8 @@ export const GetMusicView: React.FC = () => {
               <Sparkles className="w-4 h-4" />
               <span>Hell yeah, all done! Open Downloads to listen.</span>
             </div>
+          ) : doneWithFailures != null ? (
+            <p className="text-xs text-neutral-300">{doneWithFailures}</p>
           ) : (
             summaryText && <p className="text-xs text-neutral-300">{summaryText}</p>
           )}

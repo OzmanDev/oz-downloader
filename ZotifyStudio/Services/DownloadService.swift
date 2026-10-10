@@ -159,6 +159,7 @@ final class DownloadService: ObservableObject {
     @Published var showProgressDetails = false
     @Published var tabBadge: DownloadTabBadge = .none
     @Published var showCelebration = false
+    @Published var finishFailureCount = 0
     @Published var toastMessage: String = ""
     @Published var toastVisible: Bool = false
     @Published var isSigningIn = false
@@ -494,6 +495,7 @@ final class DownloadService: ObservableObject {
         skipPlaylistFlag.value = true
         skipSongFlag.value = true
         showCelebration = false
+        finishFailureCount = 0
         killOrphanZotifyProcessesAsync(source: "stop")
         convertSkipped = true
         if convertLabel.isEmpty || convertLabel == "Convert cancelled" {
@@ -526,6 +528,7 @@ final class DownloadService: ObservableObject {
         appendLog("Cancelled playlist — \(item.name)")
         showToast("Cancelled — \(item.name)")
         showCelebration = false
+        finishFailureCount = 0
         let onlyOneActive = queueItems.filter {
             $0.status == .pending || $0.status == .downloading || $0.id == item.id
         }.count <= 1
@@ -581,6 +584,7 @@ final class DownloadService: ObservableObject {
         convertLabel = ""
         convertSkipped = false
         showCelebration = false
+        finishFailureCount = 0
         activeSongIndex = nil
         if isRunning {
             statusMessage = "Stopping…"
@@ -606,6 +610,7 @@ final class DownloadService: ObservableObject {
         convertFraction = 0
         convertLabel = ""
         convertSkipped = false
+        finishFailureCount = 0
         currentQueueIndex = 0
         var items = queue
         for i in items.indices {
@@ -857,6 +862,7 @@ final class DownloadService: ObservableObject {
         convertLabel = ""
         convertSkipped = false
         showCelebration = false
+        finishFailureCount = 0
         autoConvertEnabled = false
         tabBadge = .inProgress
         activeSongIndex = nil
@@ -1310,6 +1316,7 @@ final class DownloadService: ObservableObject {
             appendLog("Cancelled.")
             tabBadge = .none
             showCelebration = false
+            finishFailureCount = 0
         } else if downloadHadError || queueItems.contains(where: { $0.status == .failed })
             || songItems.contains(where: { $0.status == .failed }) {
             statusMessage = "Finished with errors"
@@ -1317,6 +1324,10 @@ final class DownloadService: ObservableObject {
             appendLog("Finished \(finishedTotal) playlist(s) with some errors.")
             tabBadge = .failure
             showCelebration = false
+            let failedSongCount = songItems.filter { $0.status == .failed }.count
+            if failedSongCount > 0 {
+                finishFailureCount = failedSongCount
+            }
             if downloadErrorMessage.isEmpty,
                let failed = queueItems.first(where: { $0.status == .failed }) {
                 downloadErrorMessage = failed.lastError.isEmpty
@@ -1338,6 +1349,7 @@ final class DownloadService: ObservableObject {
             downloadPhase = .idle
             tabBadge = .none
             showCelebration = false
+            finishFailureCount = 0
             appendLog("Finished with cancelled playlist(s).")
             } else {
             let allSongsSucceeded = DownloadFinish.mayMarkPlaylistDone(rows: trackRowStates())
@@ -1351,6 +1363,7 @@ final class DownloadService: ObservableObject {
                 tabBadge = .success
                 downloadErrorMessage = ""
                 showCelebration = true
+                finishFailureCount = 0
                 let newCount = songItems.filter { $0.status == .done }.count
                 let alreadyHere = songItems.filter {
                     $0.status == .skipped && $0.skipReason == .alreadySaved
@@ -1372,6 +1385,10 @@ final class DownloadService: ObservableObject {
                     downloadErrorMessage = "Some songs didn’t finish downloading."
                 }
                 showToast(downloadErrorMessage, duration: 5)
+                let failedSongCount = songItems.filter { $0.status == .failed }.count
+                if failedSongCount > 0 {
+                    finishFailureCount = failedSongCount
+                }
             }
         }
 

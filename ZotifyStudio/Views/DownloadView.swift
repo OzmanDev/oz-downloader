@@ -262,6 +262,9 @@ struct DownloadView: View {
 
             if downloads.showCelebration {
                 celebrationBanner
+            } else if let failureLine = FinishBanner.failureLine(count: downloads.finishFailureCount) {
+                Text(failureLine)
+                    .foregroundStyle(.secondary)
             } else if !progressSummary.isEmpty {
                 Text(progressSummary)
                     .foregroundStyle(.secondary)

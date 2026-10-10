@@ -8,6 +8,13 @@ export interface ClassifiedSongLine {
 export type SongBoardStatus = 'waiting' | 'inProgress' | 'skipped' | 'failed' | 'downloaded';
 export type ProgressColumn = SongBoardStatus;
 
+/** null when there are no failures (the all-done celebration stays). */
+export function failureLine(count: number): string | null {
+  if (count === 1) return 'done with 1 failure 😅👏🏾';
+  if (count >= 2) return `done with ${count} failures 😅👏🏾`;
+  return null;
+}
+
 export function summary(skipped: number, failed: number, left: number): string {
   if (failed > 0) return `${skipped} skipped · ${failed} failed · ${left} left`;
   return `${skipped} skipped · ${left} left`;

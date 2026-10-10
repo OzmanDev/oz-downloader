@@ -14,3 +14,4 @@
 - **No audio stream**: Spotify did not send the audio.
 - **Filtered**: the song matched a skip filter.
 - **What's new**: the notes shown the first time this version of the app is opened.
+- **Done with failures**: the finish line when the download and convert have finished and at least one song was not saved. It is not the all-done celebration.
