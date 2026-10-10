@@ -14,3 +14,4 @@
 - **No audio stream**: Spotify did not send the audio.
 - **Filtered**: the song matched a skip filter.
 - **What's new**: the notes shown the first time this version of the app is opened.
+- **Playlist debug log**: a small file in a playlist folder after a download. It records how many songs downloaded, skipped, or failed, and the outcome of the ones that were not downloaded. It has no account, path, or link data, and the app does not send it.
