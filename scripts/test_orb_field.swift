@@ -85,6 +85,55 @@ enum TestOrbField {
             }
         }
 
+        if OrbField.drifts(width: 1000, height: 700, pick: 0) != field {
+            failures.append("13. the default drifts should be the first merge")
+        }
+
+        var blueSides = Set<String>()
+        for layout in 0..<OrbField.layoutCount {
+            let merge = OrbField.drifts(width: 1000, height: 700, pick: layout * 2)
+            let scatter = OrbField.drifts(width: 1000, height: 700, pick: layout * 2 + 1)
+            if merge.map(\.hue) != ["blue", "violet", "teal"] || scatter.map(\.hue) != ["blue", "violet", "teal"] {
+                failures.append("14. layout \(layout) should keep blue, violet, teal")
+            }
+            let meeting = (merge[0].endX, merge[0].endY)
+            for drift in merge {
+                if drift.endX != meeting.0 || drift.endY != meeting.1 {
+                    failures.append("15. \(drift.hue) on layout \(layout) should merge with the others")
+                }
+                let traveled = distance(drift.startX, drift.startY, drift.endX, drift.endY)
+                if traveled <= 240 {
+                    failures.append("16. \(drift.hue) merge on layout \(layout) should travel more than 240, got \(traveled)")
+                }
+            }
+            for drift in scatter {
+                if drift.startX != meeting.0 || drift.startY != meeting.1 {
+                    failures.append("17. \(drift.hue) should leave from the meeting point on layout \(layout)")
+                }
+            }
+            if layout + 1 < OrbField.layoutCount {
+                let nextMerge = OrbField.drifts(width: 1000, height: 700, pick: (layout + 1) * 2)
+                for index in merge.indices {
+                    if scatter[index].endX != nextMerge[index].startX || scatter[index].endY != nextMerge[index].startY {
+                        failures.append("18. \(merge[index].hue) should start the next merge where the scatter ended")
+                    }
+                }
+            }
+            blueSides.insert(edge(of: merge[0], width: 1000, height: 700))
+            if OrbField.drifts(width: 1000, height: 700, pick: layout * 2) != merge {
+                failures.append("19. layout \(layout) should stay the same when asked twice")
+            }
+        }
+        if blueSides != Set(["leading", "trailing", "top", "bottom"]) {
+            failures.append("20. blue should be able to start on every edge, got \(blueSides.sorted())")
+        }
+
+        let firstMerge = OrbField.drifts(width: 1000, height: 700, pick: 0)
+        let firstScatter = OrbField.drifts(width: 1000, height: 700, pick: 1)
+        if firstScatter[0].endX == firstMerge[0].startX && firstScatter[0].endY == firstMerge[0].startY {
+            failures.append("21. the next leg should not retrace blue's first path")
+        }
+
         if failures.isEmpty {
             return
         }
@@ -92,6 +141,16 @@ enum TestOrbField {
             print(failure)
         }
         exit(1)
+    }
+
+    static func edge(of drift: OrbDrift, width: Double, height: Double) -> String {
+        let distances = [
+            ("leading", drift.startX),
+            ("trailing", width - drift.startX),
+            ("top", drift.startY),
+            ("bottom", height - drift.startY),
+        ]
+        return distances.min(by: { $0.1 < $1.1 })?.0 ?? "leading"
     }
 
     static func distance(_ x1: Double, _ y1: Double, _ x2: Double, _ y2: Double) -> Double {

@@ -21,6 +21,6 @@
 - **New and already here**: the note when some songs were saved in this run and some were already saved. It is one of 20 mixed lines and names both counts.
 - **New songs toast**: the note when every song in the run was newly saved. It is one of 20 new-song lines and names that count.
 - **Playlist debug log**: a small file in a playlist folder after a download. It records how many songs downloaded, skipped, or failed, and the outcome of the ones that were not downloaded. It has no account, path, or link data, and the app does not send it.
-- **Orb background**: three dim circles behind every Mac screen. They drift on their own. Glass cards and the What’s new sheet sit on top of them, so the glow shows through.
+- **Orb background**: three dim circles behind every Mac screen. They start on different edges, meet, then leave toward a new set of edges, so the path is not the same every time. Any color can start on the leading, trailing, top, or bottom edge. Glass cards and the What’s new sheet sit on top of them, so the glow shows through.
 - **Glass**: the Mac system material on buttons, cards, lists, and the other plates. It is the system blur, not a flat color. Windows is unchanged.
 - **Download selected**: the My Playlists button that downloads the playlists that are selected. It stays on screen. It is off when nothing is selected, and on when a playlist is selected.
