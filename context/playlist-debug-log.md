@@ -7,7 +7,7 @@ Mac only. After each playlist download finishes, overwrite `debug.log` inside th
 The file is the minimum needed to investigate:
 
 ```
-v2.1.2
+v2.1.1
 downloaded 18
 skipped 4
 failed 1
@@ -17,6 +17,6 @@ failed 1
 
 Counts come first. Only songs that were not downloaded are listed, as `number outcome detail`. Detail is one of: Already here, Downloaded previously, Already downloaded, Filtered, Duplicate, Cancelled, Unavailable, Local file, No audio stream, Failed, Skipped. Any other detail is omitted. No song titles, file paths, account names, email, tokens, cookies, or links.
 
-Version is 2.1.2 so What’s new shows again. Keep the existing four notes and add:
+The app version is 2.1.1. The log’s first line is that version. What’s new keeps the existing four notes and adds:
 
 Each playlist saves a small debug log. It keeps only the minimum needed to investigate, leaves private data out, and is never shared unless you choose to send it.

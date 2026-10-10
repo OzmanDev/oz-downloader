@@ -13,8 +13,8 @@ enum OrbField {
         let anchorY = [0.30, 0.36, 0.72]
         let phase = [0.6, 2.4, 4.2]
         return (0..<3).map { index in
-            let driftX = 24 * sin(time * 0.2 + phase[index])
-            let driftY = 24 * cos(time * 0.15 + phase[index])
+            let driftX = 64 * sin(time * 0.2 + phase[index])
+            let driftY = 64 * cos(time * 0.15 + phase[index])
             return OrbPlacement(
                 hue: hues[index],
                 x: width * anchorX[index] + driftX,

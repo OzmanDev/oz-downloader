@@ -1,8 +1,8 @@
 import Foundation
 
 enum WhatsNew {
-    static let version = "2.1.2"
-    static let title = "What's new in v2.1.2"
+    static let version = "2.1.1"
+    static let title = "What's new in v2.1.1"
     static let lines = [
         "Refetch names and tags on playlists you already saved.",
         "Progress shows each song as it waits, downloads, skips, or finishes.",

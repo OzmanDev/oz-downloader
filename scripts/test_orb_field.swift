@@ -42,6 +42,13 @@ enum TestOrbField {
             }
         }
 
+        for index in 0..<3 {
+            let traveled = distance(atZero[index], atTwelve[index])
+            if traveled <= 80 {
+                failures.append("7. orb \(index) at t=12 should be more than 80 points from t=0 on a 1000 by 700 canvas, got \(traveled)")
+            }
+        }
+
         let atForty = OrbField.orbs(at: 40, width: 1000, height: 700)
         for sample in [atZero, atForty] {
             for orb in sample {
