@@ -21,6 +21,7 @@
 		9B6D03A50BCD4C5298876114 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99684850B87A419EA4DA2E68 /* SettingsView.swift */; };
 		E7D878910F0D4DCEB4D6E6E0 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 232F3203D3ED4E0EA8299A39 /* AboutView.swift */; };
 		4A8E1C93B7D24F06A5C19E72 /* WhatsNewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D91F04A8B24E37B0D5A1C8 /* WhatsNewSheet.swift */; };
+		A7C3E91B4D2F48A0B6C15E84 /* FooterLinkPulse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F8B6D2A9C4E47B3A5D0E7F1 /* FooterLinkPulse.swift */; };
 
 		0D6C410D7AA24432BC393F37 /* UITestHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D529DF3F1AD48D09649F526 /* UITestHelpers.swift */; };
 		AF381BAF30834C2C93AA418C /* GetMusicUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33459083D4D74580AD60B721 /* GetMusicUITests.swift */; };
@@ -47,6 +48,7 @@
 		99684850B87A419EA4DA2E68 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		232F3203D3ED4E0EA8299A39 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		C6D91F04A8B24E37B0D5A1C8 /* WhatsNewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewSheet.swift; sourceTree = "<group>"; };
+		1F8B6D2A9C4E47B3A5D0E7F1 /* FooterLinkPulse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FooterLinkPulse.swift; sourceTree = "<group>"; };
 
 		2D529DF3F1AD48D09649F526 /* UITestHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestHelpers.swift; sourceTree = "<group>"; };
 		33459083D4D74580AD60B721 /* GetMusicUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GetMusicUITests.swift; sourceTree = "<group>"; };
@@ -136,6 +138,7 @@
 				99684850B87A419EA4DA2E68 /* SettingsView.swift */,
 				232F3203D3ED4E0EA8299A39 /* AboutView.swift */,
 				C6D91F04A8B24E37B0D5A1C8 /* WhatsNewSheet.swift */,
+				1F8B6D2A9C4E47B3A5D0E7F1 /* FooterLinkPulse.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -289,6 +292,7 @@
 				9B6D03A50BCD4C5298876114 /* SettingsView.swift in Sources */,
 				E7D878910F0D4DCEB4D6E6E0 /* AboutView.swift in Sources */,
 				4A8E1C93B7D24F06A5C19E72 /* WhatsNewSheet.swift in Sources */,
+				A7C3E91B4D2F48A0B6C15E84 /* FooterLinkPulse.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

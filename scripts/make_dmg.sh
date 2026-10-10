@@ -41,6 +41,7 @@ SOURCES=(
   "${ROOT}/ZotifyStudio/Views/AboutView.swift"
   "${ROOT}/ZotifyStudio/Views/WhatsNewSheet.swift"
   "${ROOT}/ZotifyStudio/Views/ContactFooter.swift"
+  "${ROOT}/ZotifyStudio/Views/FooterLinkPulse.swift"
   "${ROOT}/ZotifyStudio/Views/LinkPreviewCard.swift"
   "${ROOT}/ZotifyStudio/Views/PlaylistArtworkView.swift"
 )
