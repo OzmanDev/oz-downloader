@@ -36,6 +36,7 @@ struct DownloadView: View {
             // Hard-disable layout animations when Preview / Progress appear or resize.
             .transaction { $0.disablesAnimations = true }
         }
+        .scrollContentBackground(.hidden)
         .onChange(of: previews.urlsText) { newValue in
             previews.schedulePreview(for: newValue, musicRoot: store.settings.rootPath)
         }

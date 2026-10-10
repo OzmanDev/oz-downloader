@@ -1,41 +1,50 @@
 import SwiftUI
 
 struct OrbBackgroundView: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var clockStart = Date()
-
     var body: some View {
-        Group {
-            if reduceMotion {
-                circles(at: clockStart.timeIntervalSinceReferenceDate)
-            } else {
-                TimelineView(.periodic(from: clockStart, by: 1.0 / 30.0)) { timeline in
-                    circles(at: timeline.date.timeIntervalSinceReferenceDate)
+        GeometryReader { proxy in
+            let drifts = OrbField.drifts(
+                width: proxy.size.width,
+                height: proxy.size.height
+            )
+            ZStack {
+                ForEach(drifts, id: \.hue) { drift in
+                    DriftingOrb(drift: drift)
                 }
             }
         }
         .allowsHitTesting(false)
         .ignoresSafeArea()
     }
+}
 
-    private func circles(at time: TimeInterval) -> some View {
-        GeometryReader { proxy in
-            let orbs = OrbField.orbs(
-                at: time,
-                width: proxy.size.width,
-                height: proxy.size.height
-            )
-            ZStack {
-                ForEach(Array(orbs.enumerated()), id: \.offset) { _, orb in
-                    Circle()
-                        .fill(color(for: orb.hue))
-                        .frame(width: 420, height: 420)
-                        .blur(radius: 100)
-                        .opacity(0.22)
-                        .position(x: orb.x, y: orb.y)
+private struct DriftingOrb: View {
+    let drift: OrbDrift
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var slid = false
+
+    var body: some View {
+        Circle()
+            .fill(color(for: drift.hue))
+            .frame(width: 420, height: 420)
+            .blur(radius: 70)
+            .opacity(0.28)
+            .position(x: drift.startX, y: drift.startY)
+            .offset(slide)
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: drift.seconds).repeatForever(autoreverses: true)) {
+                    slid = true
                 }
             }
-        }
+    }
+
+    private var slide: CGSize {
+        guard !reduceMotion, slid else { return .zero }
+        return CGSize(
+            width: drift.endX - drift.startX,
+            height: drift.endY - drift.startY
+        )
     }
 
     private func color(for hue: String) -> Color {

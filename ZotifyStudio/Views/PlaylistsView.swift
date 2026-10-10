@@ -280,6 +280,7 @@ struct PlaylistsView: View {
                             }
                         }
                     }
+                    .scrollContentBackground(.hidden)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
             }
@@ -447,6 +448,7 @@ struct PlaylistsView: View {
                         }
                         .padding(.vertical, 2)
                     }
+                    .scrollContentBackground(.hidden)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

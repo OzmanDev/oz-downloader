@@ -82,6 +82,7 @@ struct SettingsView: View {
                 .buttonStyle(.borderedProminent)
             }
         }
+        .scrollContentBackground(.hidden)
         .formStyle(.grouped)
         .padding()
         .task {

@@ -1,25 +1,41 @@
 import Foundation
 
-struct OrbPlacement: Equatable {
+struct OrbDrift: Equatable {
     var hue: String
-    var x: Double
-    var y: Double
+    var startX: Double
+    var startY: Double
+    var endX: Double
+    var endY: Double
+    var seconds: TimeInterval
 }
 
 enum OrbField {
-    static func orbs(at time: TimeInterval, width: Double, height: Double) -> [OrbPlacement] {
-        let hues = ["blue", "violet", "teal"]
-        let anchorX = [0.22, 0.74, 0.48]
-        let anchorY = [0.30, 0.36, 0.72]
-        let phase = [0.6, 2.4, 4.2]
-        return (0..<3).map { index in
-            let driftX = 64 * sin(time * 0.2 + phase[index])
-            let driftY = 64 * cos(time * 0.15 + phase[index])
-            return OrbPlacement(
-                hue: hues[index],
-                x: width * anchorX[index] + driftX,
-                y: height * anchorY[index] + driftY
-            )
-        }
+    static func drifts(width: Double, height: Double) -> [OrbDrift] {
+        [
+            OrbDrift(
+                hue: "blue",
+                startX: width * 0.22,
+                startY: height * 0.28,
+                endX: width * 0.22 + 121,
+                endY: height * 0.28,
+                seconds: 8
+            ),
+            OrbDrift(
+                hue: "violet",
+                startX: width * 0.78,
+                startY: height * 0.32,
+                endX: width * 0.78 - 121,
+                endY: height * 0.32,
+                seconds: 8
+            ),
+            OrbDrift(
+                hue: "teal",
+                startX: width * 0.48,
+                startY: height * 0.72,
+                endX: width * 0.48,
+                endY: height * 0.72 - 121,
+                seconds: 8
+            ),
+        ]
     }
 }

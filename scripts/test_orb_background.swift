@@ -45,14 +45,13 @@ enum TestOrbBackground {
             failures.append("1. a click on the screen should pass through the orb background, got \(model.clicks)")
         }
 
-        let time = Date().timeIntervalSinceReferenceDate
-        let orbs = OrbField.orbs(at: time, width: Double(width), height: Double(height))
-        for (index, orb) in orbs.enumerated() {
-            guard let point = appKitPoint(for: orb, width: width, height: height) else { continue }
+        let drifts = OrbField.drifts(width: Double(width), height: Double(height))
+        for (index, drift) in drifts.enumerated() {
+            guard let point = appKitPoint(for: drift, width: width, height: height) else { continue }
             let before = model.clicks
             click(point, on: host, window: window)
             if model.clicks != before + 1 {
-                failures.append("2. a click on the \(orb.hue) orb should pass through, got \(model.clicks) after \(before) at orb \(index)")
+                failures.append("2. a click on the \(drift.hue) orb should pass through, got \(model.clicks) after \(before) at orb \(index)")
             }
         }
 
@@ -87,13 +86,17 @@ enum TestOrbBackground {
     }
 
     /// SwiftUI places orbs from the top. AppKit clicks are measured from the bottom.
-    static func appKitPoint(for orb: OrbPlacement, width: CGFloat, height: CGFloat) -> NSPoint? {
+    static func appKitPoint(for drift: OrbDrift, width: CGFloat, height: CGFloat) -> NSPoint? {
         let radius: CGFloat = 210
-        let clampedX = min(max(CGFloat(orb.x), 0), width)
-        let clampedY = min(max(CGFloat(orb.y), 0), height)
-        let dx = clampedX - CGFloat(orb.x)
-        let dy = clampedY - CGFloat(orb.y)
+        let clampedX = min(max(CGFloat(drift.startX), 0), width)
+        let clampedY = min(max(CGFloat(drift.startY), 0), height)
+        let dx = clampedX - CGFloat(drift.startX)
+        let dy = clampedY - CGFloat(drift.startY)
         guard dx * dx + dy * dy <= radius * radius else { return nil }
-        return NSPoint(x: clampedX, y: height - clampedY)
+        // The far edges of the view are not inside it, so a start on that edge
+        // is clicked on the nearest point that still receives the event.
+        let x = min(clampedX, max(width - 1, 0))
+        let y = min(height - clampedY, max(height - 1, 0))
+        return NSPoint(x: x, y: y)
     }
 }

@@ -47,6 +47,7 @@ struct AboutView: View {
             .padding(28)
             .frame(maxWidth: 640, alignment: .leading)
         }
+        .scrollContentBackground(.hidden)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
