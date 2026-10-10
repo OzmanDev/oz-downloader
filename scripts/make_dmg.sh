@@ -218,6 +218,15 @@ else
   chflags hidden "${MOUNT_DIR}/.background" 2>/dev/null || true
 fi
 
+# The window title uses the same OZ icon as the app.
+if [[ -f "${ICON_ICNS}" ]]; then
+  cp "${ICON_ICNS}" "${MOUNT_DIR}/.VolumeIcon.icns"
+  if command -v SetFile >/dev/null 2>&1; then
+    SetFile -a V "${MOUNT_DIR}/.VolumeIcon.icns" 2>/dev/null || true
+    SetFile -a C "${MOUNT_DIR}" 2>/dev/null || true
+  fi
+fi
+
 # Apply window size, background, and icon positions (app → Applications).
 # Finder writes these into .DS_Store — without that file the arrow never appears.
 osascript <<EOF

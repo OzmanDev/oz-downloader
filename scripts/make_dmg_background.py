@@ -1,44 +1,74 @@
 #!/usr/bin/env python3
-"""Generate a simple DMG background: arrow + 'Drag here'."""
+"""Installer window art: theme glows, a blue arrow, and a short instruction."""
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
 W, H = 640, 400
-# Soft dark gray matching Finder dark windows
-bg = (38, 40, 48, 255)
-arrow = (180, 185, 195, 255)
-text_c = (210, 214, 220, 255)
+INK = (16, 18, 24, 255)
+BLUE = (10, 132, 255)
+VIOLET = (117, 82, 173)
+TEAL = (46, 122, 128)
+ARROW = (120, 186, 255, 255)
+TITLE = (244, 246, 250, 255)
+LABEL = (186, 196, 214, 255)
 
-out = Path(__file__).resolve().parent.parent / "build" / "dmg-resources" / "background.png"
-out.parent.mkdir(parents=True, exist_ok=True)
 
-img = Image.new("RGBA", (W, H), bg)
-draw = ImageDraw.Draw(img)
+def font(size: int, bold: bool = False) -> ImageFont.ImageFont:
+    candidates = [
+        "/System/Library/Fonts/SFNS.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/System/Library/Fonts/Helvetica.ttc",
+    ]
+    if bold:
+        candidates.insert(0, "/System/Library/Fonts/Supplemental/Arial Bold.ttf")
+    for path in candidates:
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
 
-# Horizontal arrow between app (left) and Applications (right)
-cx, cy = W // 2, 168
-shaft_y0, shaft_y1 = cy - 6, cy + 6
-draw.rounded_rectangle([cx - 70, shaft_y0, cx + 40, shaft_y1], radius=4, fill=arrow)
-# Arrow head pointing right
-draw.polygon(
-    [(cx + 38, cy - 22), (cx + 78, cy), (cx + 38, cy + 22)],
-    fill=arrow,
-)
 
-# Label under arrow
-try:
-    font = ImageFont.truetype("/System/Library/Fonts/SFNS.ttf", 22)
-except OSError:
-    try:
-        font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 22)
-    except OSError:
-        font = ImageFont.load_default()
+def paint_glow(img: Image.Image, cx: int, cy: int, radius: int, rgb: tuple[int, int, int], peak: int) -> None:
+    grad = Image.radial_gradient("L").resize((radius * 2, radius * 2))
+    mask = Image.eval(grad, lambda p: int(peak * (255 - p) / 255))
+    layer = Image.new("RGBA", (radius * 2, radius * 2), (*rgb, 0))
+    layer.putalpha(mask)
+    img.alpha_composite(layer, (cx - radius, cy - radius))
 
-label = "Drag here"
-bbox = draw.textbbox((0, 0), label, font=font)
-tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-draw.text(((W - tw) // 2, cy + 36), label, fill=text_c, font=font)
 
-img.save(out)
-print(out)
+def render() -> Image.Image:
+    img = Image.new("RGBA", (W, H), INK)
+    paint_glow(img, 40, 40, 260, BLUE, 110)
+    paint_glow(img, 620, 20, 240, VIOLET, 100)
+    paint_glow(img, 300, 420, 280, TEAL, 80)
+
+    draw = ImageDraw.Draw(img)
+    title_font = font(28, bold=True)
+    sub_font = font(16)
+    title = "Oz Downloader"
+    subtitle = "Drag the app into Applications"
+    title_box = draw.textbbox((0, 0), title, font=title_font)
+    sub_box = draw.textbbox((0, 0), subtitle, font=sub_font)
+    title_w = title_box[2] - title_box[0]
+    sub_w = sub_box[2] - sub_box[0]
+    draw.text(((W - title_w) // 2, 28), title, fill=TITLE, font=title_font)
+    draw.text(((W - sub_w) // 2, 64), subtitle, fill=LABEL, font=sub_font)
+
+    # Sits on the gap between the app icon and the Applications folder.
+    cx, cy = W // 2, 176
+    draw.rounded_rectangle([cx - 78, cy - 5, cx + 28, cy + 5], radius=5, fill=ARROW)
+    draw.polygon([(cx + 22, cy - 18), (cx + 64, cy), (cx + 22, cy + 18)], fill=ARROW)
+    return img
+
+
+def main() -> None:
+    out = Path(__file__).resolve().parent.parent / "build" / "dmg-resources" / "background.png"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    render().save(out)
+    print(out)
+
+
+if __name__ == "__main__":
+    main()
