@@ -9,13 +9,13 @@ enum TestWhatsNew {
         if freshInstall != true {
             failures.append("1. nil last seen should present, got \(freshInstall)")
         }
-        let alreadySeen = WhatsNew.shouldPresent(lastSeenVersion: "2.1.1")
+        let alreadySeen = WhatsNew.shouldPresent(lastSeenVersion: "2.3.0")
         if alreadySeen != false {
-            failures.append("2. last seen 2.1.1 should not present, got \(alreadySeen)")
+            failures.append("2. last seen 2.3.0 should not present, got \(alreadySeen)")
         }
-        let paddedSeen = WhatsNew.shouldPresent(lastSeenVersion: "  2.1.1\n")
+        let paddedSeen = WhatsNew.shouldPresent(lastSeenVersion: "  2.3.0\n")
         if paddedSeen != false {
-            failures.append("3. last seen padded 2.1.1 should not present, got \(paddedSeen)")
+            failures.append("3. last seen padded 2.3.0 should not present, got \(paddedSeen)")
         }
         let blankSeen = WhatsNew.shouldPresent(lastSeenVersion: " \n\t ")
         if blankSeen != true {
@@ -33,11 +33,11 @@ enum TestWhatsNew {
         if newerVersion != true {
             failures.append("13. last seen 2.2.0 should present, got \(newerVersion)")
         }
-        if WhatsNew.version != "2.1.1" {
-            failures.append("6. version expected 2.1.1, got \(WhatsNew.version)")
+        if WhatsNew.version != "2.3.0" {
+            failures.append("6. version expected 2.3.0, got \(WhatsNew.version)")
         }
-        if WhatsNew.title != "What's new in v2.1.1" {
-            failures.append("7. title expected What's new in v2.1.1, got \(WhatsNew.title)")
+        if WhatsNew.title != "What's new in v2.3.0" {
+            failures.append("7. title expected What's new in v2.3.0, got \(WhatsNew.title)")
         }
         let notes = [
             "Refetch names and tags on playlists you already saved.",
@@ -47,7 +47,7 @@ enum TestWhatsNew {
             "Each playlist saves a small debug log. It keeps only the minimum needed to investigate, leaves private data out, and is never shared unless you choose to send it.",
         ]
         if WhatsNew.lines != notes {
-            failures.append("8. lines expected the five 2.1.1 notes, got \(WhatsNew.lines)")
+            failures.append("8. lines expected the five notes, got \(WhatsNew.lines)")
         }
         if WhatsNew.continueTitle != "Continue" {
             failures.append("9. continue title expected Continue, got \(WhatsNew.continueTitle)")
@@ -62,8 +62,8 @@ enum TestWhatsNew {
         }
         WhatsNewMemory.markSeen(defaults: defaults)
         let remembered = WhatsNewMemory.lastSeen(defaults: defaults)
-        if remembered != "2.1.1" {
-            failures.append("11. continue should remember 2.1.1, got \(remembered ?? "nil")")
+        if remembered != "2.3.0" {
+            failures.append("11. continue should remember 2.3.0, got \(remembered ?? "nil")")
         }
         let afterContinue = WhatsNew.shouldPresent(lastSeenVersion: remembered)
         if afterContinue != false {
