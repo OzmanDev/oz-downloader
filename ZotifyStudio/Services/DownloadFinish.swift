@@ -167,6 +167,28 @@ enum ProgressBoard {
     }
 }
 
+struct FailedSongInput: Equatable {
+    var name: String
+    var reasonLabel: String
+    var failed: Bool
+}
+
+struct FailedSongNote: Equatable {
+    var name: String
+    var reason: String
+}
+
+enum FailedSongNotes {
+    /// Only songs that failed. A blank reason becomes "Failed".
+    static func list(_ rows: [FailedSongInput]) -> [FailedSongNote] {
+        rows.compactMap { row in
+            guard row.failed else { return nil }
+            let reason = row.reasonLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+            return FailedSongNote(name: row.name, reason: reason.isEmpty ? "Failed" : reason)
+        }
+    }
+}
+
 enum FinishBanner {
     /// nil when nothing failed. Otherwise one line from the failure list.
     static func failureLine(count: Int, succeeded: Int = 0, pick: Int = 0) -> String? {

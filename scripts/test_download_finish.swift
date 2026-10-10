@@ -398,6 +398,24 @@ enum TestDownloadFinish {
             failures.append("73. two failure picks should not be the same line")
         }
 
+        let failedNotes = FailedSongNotes.list([
+            FailedSongInput(name: "Kept", reasonLabel: "Already here", failed: false),
+            FailedSongInput(name: "Missing", reasonLabel: "No audio stream", failed: true),
+            FailedSongInput(name: "Quiet", reasonLabel: "  ", failed: true),
+        ])
+        if failedNotes.count != 2 {
+            failures.append("74. what-failed list expected only the failed songs, got \(failedNotes.count)")
+        }
+        if failedNotes.first?.name != "Missing" || failedNotes.first?.reason != "No audio stream" {
+            failures.append("74. first failed song expected Missing / No audio stream, got \(String(describing: failedNotes.first))")
+        }
+        if failedNotes.last?.reason != "Failed" {
+            failures.append("75. a failed song with no reason expected \"Failed\", got \(String(describing: failedNotes.last?.reason))")
+        }
+        if FailedSongNotes.list([FailedSongInput(name: "Kept", reasonLabel: "Already here", failed: false)]).isEmpty == false {
+            failures.append("76. a run with no failed songs should not list anything")
+        }
+
         if failures.isEmpty {
             return
         }

@@ -10,6 +10,7 @@ struct DownloadView: View {
     @State private var celebrationScale: CGFloat = 0
     @State private var celebrationOpacity: Double = 0
     @State private var confettiPhase: Int = 0
+    @State private var showFailedSongs = false
 
     var body: some View {
         ScrollView {
@@ -54,6 +55,9 @@ struct DownloadView: View {
         .onDisappear {
             celebrationScale = 0
             celebrationOpacity = 0
+        }
+        .onChange(of: downloads.finishBannerText) { _ in
+            showFailedSongs = false
         }
         .onChange(of: downloads.showCelebration) { show in
             // No withAnimation — animating celebration was blanking the whole Get Music scroll view.
@@ -264,8 +268,21 @@ struct DownloadView: View {
             if downloads.showCelebration {
                 celebrationBanner
             } else if downloads.finishFailureCount > 0, !downloads.finishBannerText.isEmpty {
-                Text(downloads.finishBannerText)
-                    .foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(downloads.finishBannerText)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button("What failed") {
+                        showFailedSongs = true
+                    }
+                    .appGlassButton(prominent: false)
+                    .fixedSize()
+                    .accessibilityIdentifier("progress.whatFailed")
+                }
+                .popover(isPresented: $showFailedSongs, arrowEdge: .bottom) {
+                    failedSongsPopup
+                }
             } else if !progressSummary.isEmpty {
                 Text(progressSummary)
                     .foregroundStyle(.secondary)
@@ -351,6 +368,56 @@ struct DownloadView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .appGlassCard()
+    }
+
+    private var failedSongNotes: [FailedSongNote] {
+        FailedSongNotes.list(downloads.songItems.map { song in
+            FailedSongInput(
+                name: song.name,
+                reasonLabel: song.reasonLabel,
+                failed: song.status == .failed
+            )
+        })
+    }
+
+    private var failedSongsPopup: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("What failed")
+                .font(.headline)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(failedSongNotes.enumerated()), id: \.offset) { _, note in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(note.name)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(note.reason)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .appGlassChrome()
+                    }
+                }
+            }
+            .frame(maxHeight: 280)
+
+            HStack {
+                Spacer()
+                Button("Close") {
+                    showFailedSongs = false
+                }
+                .appGlassButton(prominent: false)
+            }
+        }
+        .padding(16)
+        .frame(width: 340)
+        .appGlassCard()
+        .presentationBackground(.regularMaterial)
     }
 
     private var celebrationBanner: some View {

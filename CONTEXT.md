@@ -14,7 +14,8 @@
 - **No audio stream**: Spotify did not send the audio.
 - **Filtered**: the song matched a skip filter.
 - **What's new**: the notes shown the first time this version of the app is opened.
-- **Done with failures**: the finish line when the download and convert have finished and at least one song was not saved. It is one of 20 failure lines, chosen once for that run. It names how many failed and how many succeeded. It is not the all-done celebration.
+- **Done with failures**: the finish line when the download and convert have finished and at least one song was not saved. It is one of 20 failure lines, chosen once for that run. It names how many failed and how many succeeded. It is not the all-done celebration. Next to that line, What failed opens a glass popup of each failed song and why.
+- **What failed**: the glass button beside the failure finish line. It opens a glass popup listing each failed song and its reason. It is not shown when nothing failed.
 - **All done**: the celebration when the run finished and no song failed. It is one of 20 all-done lines, chosen once for that run.
 - **Already here toast**: the note when every song was already saved. It is one of 20 already-here lines, not an all-done or failure line.
 - **New and already here**: the note when some songs were saved in this run and some were already saved. It is one of 20 mixed lines and names both counts.

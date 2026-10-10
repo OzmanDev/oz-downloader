@@ -12,4 +12,6 @@ Each finish purpose has its own list of 20 lines. The app picks one at random wh
 
 Zero or negative failures do not produce a failure line. A cancelled run shows neither the celebration nor a failure line.
 
+On Mac, the failure line has a glass **What failed** button. It opens a glass popup of the failed songs and the reason on each row. A blank reason is shown as “Failed”. Songs that were saved or skipped are not in that list. Windows is unchanged.
+
 Succeeded is songs that downloaded or were skipped. Failed is the number of Failed song rows.
