@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from make_dmg_background import H, SCALE, W, render
+from make_dmg_background import H, POINTS_H, SCALE, W, render
 
 img = render()
 failures = []
@@ -20,7 +20,7 @@ for earlier, later in zip(glow, glow[1:]):
         break
 
 top_right = img.getpixel((1180, 70))
-middle = img.getpixel((640, 520))
+middle = img.getpixel((640, 300))
 if top_right[0] <= middle[0]:
     failures.append(f"3. the violet glow should tint the top corner, got {top_right} vs {middle}")
 
@@ -33,6 +33,11 @@ if not any(35 < channel < 220 for channel in edge):
     failures.append(f"5. the arrow edge should be smoothed, got {edge}")
 if any(later - earlier > 90 for earlier, later in zip(edge, edge[1:])):
     failures.append(f"5. the arrow edge jumps in one pixel, got {edge}")
+
+# Icons are centered at y=180 and are 96 points tall. A name under them needs
+# more room than the 4 points left below the icon.
+if POINTS_H > 180 + 48 + 4:
+    failures.append(f"6. the window should end at the icons so the names are outside, height {POINTS_H}")
 
 if failures:
     print("\n".join(failures))

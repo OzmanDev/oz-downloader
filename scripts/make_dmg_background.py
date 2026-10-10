@@ -4,8 +4,9 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-# Finder shows this in a 640 by 400 point window. Two pixels per point.
-POINTS_W, POINTS_H = 640, 400
+# Finder shows this in a 640 by 230 point view. Two pixels per point.
+# The view ends at the bottom of the icons, so Finder's names fall outside it.
+POINTS_W, POINTS_H = 640, 230
 SCALE = 2
 W, H = POINTS_W * SCALE, POINTS_H * SCALE
 INK = (16, 18, 24, 255)
@@ -71,7 +72,7 @@ def render() -> Image.Image:
     img = Image.new("RGBA", (W, H), INK)
     paint_glow(img, 180, 220, 150, BLUE, 150)
     paint_glow(img, 1140, 80, 160, VIOLET, 140)
-    paint_glow(img, 640, 760, 170, TEAL, 120)
+    paint_glow(img, 640, 400, 170, TEAL, 120)
 
     draw = ImageDraw.Draw(img)
     title_font = font(28 * SCALE, bold=True)
