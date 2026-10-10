@@ -21,6 +21,8 @@
 		9B6D03A50BCD4C5298876114 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99684850B87A419EA4DA2E68 /* SettingsView.swift */; };
 		E7D878910F0D4DCEB4D6E6E0 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 232F3203D3ED4E0EA8299A39 /* AboutView.swift */; };
 		4A8E1C93B7D24F06A5C19E72 /* WhatsNewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D91F04A8B24E37B0D5A1C8 /* WhatsNewSheet.swift */; };
+		A1B2C3D4E5F64789A0B1C2D3 /* OrbField.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4F5A6B7C8D94780A1B2C3D4 /* OrbField.swift */; };
+		F6A7B8C9D0E14782A3B4C5D6 /* OrbBackgroundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A8B7C6D5E4F4321A0B9C8D7 /* OrbBackgroundView.swift */; };
 
 		0D6C410D7AA24432BC393F37 /* UITestHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D529DF3F1AD48D09649F526 /* UITestHelpers.swift */; };
 		AF381BAF30834C2C93AA418C /* GetMusicUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33459083D4D74580AD60B721 /* GetMusicUITests.swift */; };
@@ -47,6 +49,8 @@
 		99684850B87A419EA4DA2E68 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		232F3203D3ED4E0EA8299A39 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		C6D91F04A8B24E37B0D5A1C8 /* WhatsNewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewSheet.swift; sourceTree = "<group>"; };
+		E4F5A6B7C8D94780A1B2C3D4 /* OrbField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbField.swift; sourceTree = "<group>"; };
+		9A8B7C6D5E4F4321A0B9C8D7 /* OrbBackgroundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbBackgroundView.swift; sourceTree = "<group>"; };
 
 		2D529DF3F1AD48D09649F526 /* UITestHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestHelpers.swift; sourceTree = "<group>"; };
 		33459083D4D74580AD60B721 /* GetMusicUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GetMusicUITests.swift; sourceTree = "<group>"; };
@@ -136,6 +140,8 @@
 				99684850B87A419EA4DA2E68 /* SettingsView.swift */,
 				232F3203D3ED4E0EA8299A39 /* AboutView.swift */,
 				C6D91F04A8B24E37B0D5A1C8 /* WhatsNewSheet.swift */,
+				E4F5A6B7C8D94780A1B2C3D4 /* OrbField.swift */,
+				9A8B7C6D5E4F4321A0B9C8D7 /* OrbBackgroundView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -289,6 +295,8 @@
 				9B6D03A50BCD4C5298876114 /* SettingsView.swift in Sources */,
 				E7D878910F0D4DCEB4D6E6E0 /* AboutView.swift in Sources */,
 				4A8E1C93B7D24F06A5C19E72 /* WhatsNewSheet.swift in Sources */,
+				A1B2C3D4E5F64789A0B1C2D3 /* OrbField.swift in Sources */,
+				F6A7B8C9D0E14782A3B4C5D6 /* OrbBackgroundView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

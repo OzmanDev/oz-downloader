@@ -14,3 +14,4 @@
 - **No audio stream**: Spotify did not send the audio.
 - **Filtered**: the song matched a skip filter.
 - **What's new**: the notes shown the first time this version of the app is opened.
+- **Orb background**: three dim circles behind every Mac screen. They drift on their own. The cards and the What’s new sheet stay solid on top of them.

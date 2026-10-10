@@ -35,6 +35,7 @@ SOURCES=(
   "${ROOT}/ZotifyStudio/Services/DownloadService.swift"
   "${ROOT}/ZotifyStudio/Services/DownloadFinish.swift"
   "${ROOT}/ZotifyStudio/Services/LinkPreviewService.swift"
+  "${ROOT}/ZotifyStudio/Views/OrbField.swift"
   "${ROOT}/ZotifyStudio/Views/DownloadView.swift"
   "${ROOT}/ZotifyStudio/Views/PlaylistsView.swift"
   "${ROOT}/ZotifyStudio/Views/SettingsView.swift"
@@ -43,6 +44,7 @@ SOURCES=(
   "${ROOT}/ZotifyStudio/Views/ContactFooter.swift"
   "${ROOT}/ZotifyStudio/Views/LinkPreviewCard.swift"
   "${ROOT}/ZotifyStudio/Views/PlaylistArtworkView.swift"
+  "${ROOT}/ZotifyStudio/Views/OrbBackgroundView.swift"
 )
 
 BINS=()
