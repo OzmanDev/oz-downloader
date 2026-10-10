@@ -160,13 +160,13 @@ struct PlaylistsView: View {
                 } label: {
                     Label(busy ? "Refreshing…" : "Load from Spotify", systemImage: "arrow.triangle.2.circlepath")
                 }
-                .buttonStyle(.borderedProminent)
+                .appGlassButton(prominent: true)
                 .disabled(busy || downloads.isSigningIn)
                 .accessibilityIdentifier("playlists.refresh")
             }
 
             Button(downloads.hasActiveDownload && hasDownloadSelection ? "Add selected to queue" : "Download selected") { downloadSelected() }
-                .buttonStyle(.borderedProminent)
+                .appGlassButton(prominent: true)
                 .disabled(!hasDownloadSelection)
                 .accessibilityIdentifier("playlists.downloadSelected")
 
@@ -178,6 +178,7 @@ struct PlaylistsView: View {
             } label: {
                 Label("Fix names and tags", systemImage: "tag")
             }
+            .appGlassButton(prominent: false)
             .disabled(!canFixSavedLists)
             .help(fixSavedListsHelp)
             .accessibilityIdentifier("playlists.fixSavedTags")
@@ -240,8 +241,8 @@ struct PlaylistsView: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .textBackgroundColor)))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
+                .appGlassChrome()
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.secondary.opacity(0.25)))
             }
 
             Group {
@@ -287,7 +288,7 @@ struct PlaylistsView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .controlBackgroundColor)))
+        .appGlassCard()
     }
 
     private func playlistRow(_ pl: FetchedPlaylist) -> some View {
@@ -391,10 +392,12 @@ struct PlaylistsView: View {
                     Button("Open page again") {
                         downloads.reopenSignInPage()
                     }
+                    .appGlassButton(prominent: false)
                     .disabled(downloads.pendingAuthURL == nil)
                     Button("Cancel") {
                         downloads.cancelSignIn()
                     }
+                    .appGlassButton(prominent: false)
                 }
             } else {
                 Button {
@@ -402,7 +405,7 @@ struct PlaylistsView: View {
                 } label: {
                     Label("Sign in with Spotify", systemImage: "arrow.up.right.square")
                 }
-                .buttonStyle(.borderedProminent)
+                .appGlassButton(prominent: true)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -454,7 +457,7 @@ struct PlaylistsView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .controlBackgroundColor)))
+        .appGlassCard()
     }
 
     private func savedPlaylistRow(_ pl: SavedPlaylist) -> some View {
@@ -589,16 +592,17 @@ struct PlaylistsView: View {
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+                .appGlassCard(cornerRadius: 10)
             }
 
             HStack {
                 Spacer()
                 Button("Cancel") { showAddSheet = false }
+                    .appGlassButton(prominent: false)
                 Button("Add") {
                     saveValidatedAdd()
                 }
-                .buttonStyle(.borderedProminent)
+                .appGlassButton(prominent: true)
                 .disabled(addPreview == nil || addIsLookingUp)
             }
         }

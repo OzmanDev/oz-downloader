@@ -17,15 +17,12 @@ struct WhatsNewSheet: View {
             HStack {
                 Spacer()
                 Button(WhatsNew.continueTitle, action: onContinue)
-                    .buttonStyle(.borderedProminent)
+                    .appGlassButton(prominent: true)
             }
             .padding(.top, 8)
         }
         .padding(16)
         .frame(width: 420, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
+        .appGlassCard()
     }
 }

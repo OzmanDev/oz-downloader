@@ -111,10 +111,7 @@ struct DownloadView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(nsColor: .textBackgroundColor))
-            )
+            .appGlassChrome(cornerRadius: 12)
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(linkBorderColor, lineWidth: previews.isLoading || previews.inputError != nil ? 1.5 : 1)
@@ -175,7 +172,7 @@ struct DownloadView: View {
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .controlBackgroundColor)))
+                .appGlassCard()
             }
         }
     }
@@ -194,6 +191,7 @@ struct DownloadView: View {
                     downloads.stop()
                 }
                 .controlSize(.large)
+                .appGlassButton(prominent: false)
                 .accessibilityIdentifier("getMusic.cancel")
             }
 
@@ -203,6 +201,7 @@ struct DownloadView: View {
                 Label("Open default download folder", systemImage: "folder")
             }
             .controlSize(.large)
+            .appGlassButton(prominent: false)
             .accessibilityIdentifier("getMusic.openFolder")
 
             Spacer()
@@ -231,6 +230,7 @@ struct DownloadView: View {
                         downloads.stop()
                     }
                     .controlSize(.small)
+                    .appGlassButton(prominent: false)
                     .accessibilityIdentifier("progress.cancel")
                 }
                 if downloads.isConverting {
@@ -350,7 +350,7 @@ struct DownloadView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .controlBackgroundColor)))
+        .appGlassCard()
     }
 
     private var celebrationBanner: some View {
@@ -562,10 +562,7 @@ struct DownloadView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.primary.opacity(0.04))
-        )
+        .appGlassChrome(cornerRadius: 10)
     }
 
     private func roleColor(_ role: String) -> Color {
@@ -710,13 +707,10 @@ struct DownloadView: View {
         }
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .top)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.primary.opacity(0.04))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(accent.opacity(0.25), lineWidth: 1)
-                )
+        .appGlassChrome()
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(accent.opacity(0.25), lineWidth: 1)
         )
     }
 

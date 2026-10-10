@@ -58,7 +58,7 @@ struct LinkPreviewCard: View {
                                 systemImage: isDownloading ? "plus.circle.fill" : "arrow.down.circle.fill"
                             )
                         }
-                        .buttonStyle(.borderedProminent)
+                        .appGlassButton(prominent: true)
                         .disabled(!canDownload)
                         .accessibilityIdentifier("preview.download")
 
@@ -79,9 +79,9 @@ struct LinkPreviewCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .controlBackgroundColor)))
+        .appGlassCard()
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(preview.error == nil ? statusColor.opacity(0.35) : Color.red.opacity(0.45), lineWidth: 1)
         )
     }

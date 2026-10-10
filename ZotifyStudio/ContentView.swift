@@ -100,10 +100,7 @@ struct ContentView: View {
             }
         }
         .padding(4)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.55))
-        )
+        .appGlassChrome(cornerRadius: 10)
     }
 
     private func tabButton(_ tab: AppTab) -> some View {
@@ -157,11 +154,8 @@ struct ContentView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color(nsColor: .windowBackgroundColor).opacity(0.96))
-                .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
-        )
+        .appGlassChrome(cornerRadius: 10)
+        .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)

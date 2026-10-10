@@ -37,6 +37,7 @@ SOURCES=(
   "${ROOT}/ZotifyStudio/Services/DownloadFinish.swift"
   "${ROOT}/ZotifyStudio/Services/LinkPreviewService.swift"
   "${ROOT}/ZotifyStudio/Views/OrbField.swift"
+  "${ROOT}/ZotifyStudio/Views/AppGlass.swift"
   "${ROOT}/ZotifyStudio/Views/DownloadView.swift"
   "${ROOT}/ZotifyStudio/Views/PlaylistsView.swift"
   "${ROOT}/ZotifyStudio/Views/SettingsView.swift"

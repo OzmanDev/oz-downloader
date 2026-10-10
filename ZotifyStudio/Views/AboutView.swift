@@ -40,7 +40,7 @@ struct AboutView: View {
                 }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .controlBackgroundColor)))
+                .appGlassCard()
 
                 Spacer(minLength: 0)
             }
@@ -61,6 +61,6 @@ struct AboutView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .controlBackgroundColor)))
+        .appGlassCard()
     }
 }

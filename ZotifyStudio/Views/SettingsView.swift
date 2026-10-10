@@ -21,6 +21,7 @@ struct SettingsView: View {
                     TextField("Default Download Folder", text: $store.settings.rootPath)
                         .accessibilityIdentifier("prefs.rootPath")
                     Button("Choose…") { chooseRoot() }
+                        .appGlassButton(prominent: false)
                         .accessibilityIdentifier("prefs.chooseFolder")
                 }
                 Button("Open default download folder") {
@@ -28,6 +29,7 @@ struct SettingsView: View {
                     try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
                     NSWorkspace.shared.open(url)
                 }
+                .appGlassButton(prominent: false)
                 .accessibilityIdentifier("prefs.openFolder")
             }
 
@@ -73,18 +75,20 @@ struct SettingsView: View {
                         NSWorkspace.shared.open(url)
                     }
                 }
+                .appGlassButton(prominent: false)
             }
 
             Section {
                 Button("Save preferences") {
                     store.syncToZotifyConfig()
                 }
-                .buttonStyle(.borderedProminent)
+                .appGlassButton(prominent: true)
             }
         }
         .scrollContentBackground(.hidden)
         .formStyle(.grouped)
         .padding()
+        .background(.regularMaterial)
         .task {
             store.syncAccountFromCredentials()
             if store.isLoggedIn {
@@ -119,6 +123,7 @@ struct SettingsView: View {
 
             if store.isLoggedIn {
                 Button("Sign out…") { confirmSignOut = true }
+                    .appGlassButton(prominent: false)
                     .accessibilityIdentifier("prefs.signOut")
             } else if downloads.isSigningIn {
                 VStack(alignment: .trailing, spacing: 8) {
@@ -134,11 +139,13 @@ struct SettingsView: View {
                         Button("Open page again") {
                             downloads.reopenSignInPage()
                         }
+                        .appGlassButton(prominent: false)
                         .disabled(downloads.pendingAuthURL == nil)
                         .accessibilityIdentifier("prefs.reopenAuth")
                         Button("Cancel") {
                             downloads.cancelSignIn()
                         }
+                        .appGlassButton(prominent: false)
                         .accessibilityIdentifier("prefs.cancelSignIn")
                     }
                 }
@@ -146,7 +153,7 @@ struct SettingsView: View {
                 Button("Sign in with Spotify") {
                     Task { await signIn() }
                 }
-                .buttonStyle(.borderedProminent)
+                .appGlassButton(prominent: true)
                 .accessibilityIdentifier("prefs.signIn")
             }
         }
@@ -165,7 +172,7 @@ struct SettingsView: View {
                     .overlay(Circle().stroke(Color.accentColor.opacity(0.35), lineWidth: 1))
             } else if store.isLoggedIn, store.isRefreshingProfile {
                 Circle()
-                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .fill(.regularMaterial)
                     .frame(width: 40, height: 40)
                     .overlay {
                         ProgressView()
