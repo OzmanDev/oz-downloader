@@ -1,4 +1,12 @@
-import { classify, column, failureLine, rowLabel, summary } from './downloadLineOutcome.ts';
+import { classify, column, rowLabel, summary } from './downloadLineOutcome.ts';
+import {
+  allDone,
+  alreadyHere as alreadyHereLine,
+  catalogSize,
+  fresh,
+  mixed,
+  withFailures,
+} from './finishLines.ts';
 
 const failures: string[] = [];
 
@@ -249,42 +257,79 @@ if (reasonLabelWins !== 'Local file') {
   );
 }
 
-const oneFailure = failureLine(1);
-if (oneFailure !== 'done with 1 failure 😅👏🏾') {
+const oneFailure = withFailures(1, 18, 0);
+if (oneFailure !== 'Oz got 1 failure, but look at the good side 18 succeeded 😅👏🏾') {
   failures.push(
-    `57. one failed song: failureLine expected "done with 1 failure 😅👏🏾", got ${JSON.stringify(oneFailure)}`
+    `57. one failed song: failure line expected the first failure message, got ${JSON.stringify(oneFailure)}`
   );
 }
 
-const twoFailures = failureLine(2);
-if (twoFailures !== 'done with 2 failures 😅👏🏾') {
+const twoFailures = withFailures(2, 4, 0);
+if (twoFailures !== 'Oz got 2 failures, but look at the good side 4 succeeded 😅👏🏾') {
   failures.push(
-    `58. two failed songs: failureLine expected "done with 2 failures 😅👏🏾", got ${JSON.stringify(twoFailures)}`
+    `58. two failed songs: failure line expected plural wording, got ${JSON.stringify(twoFailures)}`
   );
 }
 
-const threeFailures = failureLine(3);
-if (threeFailures !== 'done with 3 failures 😅👏🏾') {
-  failures.push(
-    `62. three failed songs: failureLine expected "done with 3 failures 😅👏🏾", got ${JSON.stringify(threeFailures)}`
-  );
-}
-
-const manyFailures = failureLine(4);
-if (manyFailures !== 'done with 4 failures 😅👏🏾') {
-  failures.push(
-    `59. four failed songs: failureLine expected "done with 4 failures 😅👏🏾", got ${JSON.stringify(manyFailures)}`
-  );
-}
-
-const noFailures = failureLine(0);
+const noFailures = withFailures(0, 9, 0);
 if (noFailures !== null) {
-  failures.push(`60. no failed songs: failureLine expected null, got ${JSON.stringify(noFailures)}`);
+  failures.push(`60. no failed songs: failure line expected null, got ${JSON.stringify(noFailures)}`);
 }
 
-const negativeFailures = failureLine(-1);
+const negativeFailures = withFailures(-1, 3, 4);
 if (negativeFailures !== null) {
-  failures.push(`61. a negative count: failureLine expected null, got ${JSON.stringify(negativeFailures)}`);
+  failures.push(`61. a negative count: failure line expected null, got ${JSON.stringify(negativeFailures)}`);
+}
+
+const allDoneLines = Array.from({ length: catalogSize }, (_, pick) => allDone(pick));
+const failureLines = Array.from({ length: catalogSize }, (_, pick) => withFailures(3, 11, pick)).filter(
+  (line): line is string => line != null
+);
+const alreadyLines = Array.from({ length: catalogSize }, (_, pick) => alreadyHereLine(pick));
+const mixedLines = Array.from({ length: catalogSize }, (_, pick) => mixed(2, 5, pick));
+const freshLines = Array.from({ length: catalogSize }, (_, pick) => fresh(7, pick));
+const unique = (lines: string[]) => new Set(lines).size;
+if (unique(allDoneLines) !== 20) {
+  failures.push(`63. all-done list expected 20 different lines, got ${unique(allDoneLines)}`);
+}
+if (failureLines.length !== 20 || unique(failureLines) !== 20) {
+  failures.push(`64. failure list expected 20 different lines, got ${unique(failureLines)}`);
+}
+if (unique(alreadyLines) !== 20 || unique(mixedLines) !== 20 || unique(freshLines) !== 20) {
+  failures.push('65. the other finish lists expected 20 different lines each');
+}
+const allDoneSet = new Set(allDoneLines);
+if (failureLines.some((line) => allDoneSet.has(line))) {
+  failures.push('66. a failure line was taken from the all-done list');
+}
+if (alreadyLines.some((line) => allDoneSet.has(line) || failureLines.includes(line))) {
+  failures.push('67. an already-here line was taken from another list');
+}
+if (mixedLines.some((line) => allDoneSet.has(line) || failureLines.includes(line) || alreadyLines.includes(line))) {
+  failures.push('68. a mixed line was taken from another list');
+}
+if (
+  freshLines.some(
+    (line) =>
+      allDoneSet.has(line) ||
+      failureLines.includes(line) ||
+      alreadyLines.includes(line) ||
+      mixedLines.includes(line)
+  )
+) {
+  failures.push('69. a new-songs line was taken from another list');
+}
+if (failureLines.some((line) => !line.includes('3') || !line.includes('11'))) {
+  failures.push('70. a failure line dropped the failed or succeeded count');
+}
+if (mixedLines.some((line) => !line.includes('2') || !line.includes('5'))) {
+  failures.push('71. a mixed line dropped a count');
+}
+if (allDone(20) !== allDone(0)) {
+  failures.push('72. pick 20 should stay on the all-done list');
+}
+if (withFailures(1, 18, 1) === oneFailure) {
+  failures.push('73. two failure picks should not be the same line');
 }
 
 if (failures.length > 0) {

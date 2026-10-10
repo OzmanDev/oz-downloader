@@ -8,6 +8,7 @@ import { appStore } from './appStore';
 import { getAppPaths, escapePythonPath } from './appPaths';
 import { ZotifyCLI } from './zotifyCLI';
 import { classify, summary } from './downloadLineOutcome';
+import { allDone, alreadyHere, fresh, mixed, randomPick, withFailures } from './finishLines';
 
 type Listener = () => void;
 
@@ -33,6 +34,7 @@ class DownloadServiceState {
   toastVisible: boolean = false;
   showCelebration: boolean = false;
   finishFailureCount: number = 0;
+  finishBannerText: string = '';
   requestShowGetMusic: boolean = false;
   downloadErrorMessage: string = '';
 
@@ -227,6 +229,7 @@ class DownloadServiceState {
     this.downloadErrorMessage = '';
     this.showCelebration = false;
     this.finishFailureCount = 0;
+    this.finishBannerText = '';
     this.convertFraction = 0;
     this.convertLabel = '';
     this.convertSkipped = false;
@@ -268,13 +271,21 @@ class DownloadServiceState {
           this.tabBadge = 'failure';
           this.statusMessage = 'Finished with errors';
           this.downloadPhase = 'idle';
-          this.finishFailureCount = this.songItems.filter((song) => song.status === 'failed').length;
+          this.showCelebration = false;
+          const failed = this.songItems.filter((song) => song.status === 'failed').length;
+          const succeeded = this.songItems.filter(
+            (song) => song.status === 'done' || song.status === 'skipped'
+          ).length;
+          this.finishFailureCount = failed;
+          this.finishBannerText =
+            withFailures(failed, succeeded, randomPick()) ?? '';
         } else {
           this.tabBadge = 'success';
           this.statusMessage = 'Done';
           this.downloadPhase = 'idle';
           this.finishFailureCount = 0;
           this.showCelebration = true;
+          this.finishBannerText = allDone(randomPick());
           this.showFinishToast();
         }
       }
@@ -289,19 +300,19 @@ class DownloadServiceState {
 
   private showFinishToast() {
     const newCount = this.songItems.filter((s) => s.status === 'done').length;
-    const alreadyHere = this.songItems.filter(
+    const alreadySavedCount = this.songItems.filter(
       (s) => s.status === 'skipped' && s.skipReason === 'alreadySaved'
     ).length;
     if (this.songItems.length === 0) {
-      this.showToast('All downloads completed!');
+      this.showToast(allDone(randomPick()));
       return;
     }
     if (newCount === 0) {
-      this.showToast('All already here');
-    } else if (alreadyHere > 0) {
-      this.showToast(`${newCount} new · ${alreadyHere} already here`);
+      this.showToast(alreadyHere(randomPick()));
+    } else if (alreadySavedCount > 0) {
+      this.showToast(mixed(newCount, alreadySavedCount, randomPick()));
     } else {
-      this.showToast(`${newCount} new`);
+      this.showToast(fresh(newCount, randomPick()));
     }
   }
 

@@ -14,7 +14,11 @@
 - **No audio stream**: Spotify did not send the audio.
 - **Filtered**: the song matched a skip filter.
 - **What's new**: the notes shown the first time this version of the app is opened.
-- **Done with failures**: the finish line when the download and convert have finished and at least one song was not saved. It is not the all-done celebration.
+- **Done with failures**: the finish line when the download and convert have finished and at least one song was not saved. It is one of 20 failure lines, chosen once for that run. It names how many failed and how many succeeded. It is not the all-done celebration.
+- **All done**: the celebration when the run finished and no song failed. It is one of 20 all-done lines, chosen once for that run.
+- **Already here toast**: the note when every song was already saved. It is one of 20 already-here lines, not an all-done or failure line.
+- **New and already here**: the note when some songs were saved in this run and some were already saved. It is one of 20 mixed lines and names both counts.
+- **New songs toast**: the note when every song in the run was newly saved. It is one of 20 new-song lines and names that count.
 - **Playlist debug log**: a small file in a playlist folder after a download. It records how many songs downloaded, skipped, or failed, and the outcome of the ones that were not downloaded. It has no account, path, or link data, and the app does not send it.
 - **Orb background**: three dim circles behind every Mac screen. They drift on their own. Glass cards and the What’s new sheet sit on top of them, so the glow shows through.
 - **Glass**: the Mac system material on buttons, cards, lists, and the other plates. It is the system blur, not a flat color. Windows is unchanged.

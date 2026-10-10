@@ -13,7 +13,7 @@ import { downloadService } from '../services/downloadService';
 import { linkPreviewService } from '../services/linkPreviewService';
 import { LinkPreviewCard } from '../components/LinkPreviewCard';
 import { SongDownloadItem } from '../types/downloads';
-import { failureLine, rowLabel } from '../services/downloadLineOutcome';
+import { rowLabel } from '../services/downloadLineOutcome';
 
 export const GetMusicView: React.FC = () => {
   const [urlsText, setUrlsText] = useState(linkPreviewService.urlsText);
@@ -28,6 +28,7 @@ export const GetMusicView: React.FC = () => {
   const [downloadRate, setDownloadRate] = useState(downloadService.downloadRate);
   const [showCelebration, setShowCelebration] = useState(downloadService.showCelebration);
   const [finishFailureCount, setFinishFailureCount] = useState(downloadService.finishFailureCount);
+  const [finishBannerText, setFinishBannerText] = useState(downloadService.finishBannerText);
   const [phaseLabel, setPhaseLabel] = useState(downloadService.phaseStatusLabel);
   const [phaseSummary, setPhaseSummary] = useState(downloadService.phaseProgressSummary);
   const [convertFraction, setConvertFraction] = useState(downloadService.convertFraction);
@@ -57,6 +58,7 @@ export const GetMusicView: React.FC = () => {
       setDownloadRate(downloadService.downloadRate);
       setShowCelebration(downloadService.showCelebration);
       setFinishFailureCount(downloadService.finishFailureCount);
+      setFinishBannerText(downloadService.finishBannerText);
       setPhaseLabel(downloadService.phaseStatusLabel);
       setPhaseSummary(downloadService.phaseProgressSummary);
       setConvertFraction(downloadService.convertFraction);
@@ -180,7 +182,8 @@ export const GetMusicView: React.FC = () => {
     return statusMessage;
   })();
 
-  const doneWithFailures = failureLine(finishFailureCount);
+  const doneWithFailures =
+    !showCelebration && finishFailureCount > 0 && finishBannerText ? finishBannerText : null;
 
   const summaryText = (() => {
     if (showCelebration) return '';
@@ -274,7 +277,7 @@ export const GetMusicView: React.FC = () => {
           {showCelebration ? (
             <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 rounded-xl flex items-center gap-2.5 text-emerald-400 text-sm font-medium">
               <Sparkles className="w-4 h-4" />
-              <span>Hell yeah, all done! Open Downloads to listen.</span>
+              <span>{finishBannerText}</span>
             </div>
           ) : doneWithFailures != null ? (
             <p className="text-xs text-neutral-300">{doneWithFailures}</p>

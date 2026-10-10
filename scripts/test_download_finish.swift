@@ -327,34 +327,75 @@ enum TestDownloadFinish {
             failures.append("56. case 9 skipped row with reason label \"Local file\" and skipReason alreadySaved expected \"Local file\", got \(reasonLabelWins)")
         }
 
-        let oneFailure = FinishBanner.failureLine(count: 1)
-        if oneFailure != "done with 1 failure 😅👏🏾" {
-            failures.append("57. one failed song: failureLine expected \"done with 1 failure 😅👏🏾\", got \(String(describing: oneFailure))")
+        let oneFailure = FinishLines.withFailures(failed: 1, succeeded: 18, pick: 0)
+        if oneFailure != "Oz got 1 failure, but look at the good side 18 succeeded 😅👏🏾" {
+            failures.append("57. one failed song: failure line expected the first failure message, got \(String(describing: oneFailure))")
         }
 
-        let twoFailures = FinishBanner.failureLine(count: 2)
-        if twoFailures != "done with 2 failures 😅👏🏾" {
-            failures.append("58. two failed songs: failureLine expected \"done with 2 failures 😅👏🏾\", got \(String(describing: twoFailures))")
+        let twoFailures = FinishLines.withFailures(failed: 2, succeeded: 4, pick: 0)
+        if twoFailures != "Oz got 2 failures, but look at the good side 4 succeeded 😅👏🏾" {
+            failures.append("58. two failed songs: failure line expected plural wording, got \(String(describing: twoFailures))")
         }
 
-        let threeFailures = FinishBanner.failureLine(count: 3)
-        if threeFailures != "done with 3 failures 😅👏🏾" {
-            failures.append("62. three failed songs: failureLine expected \"done with 3 failures 😅👏🏾\", got \(String(describing: threeFailures))")
-        }
-
-        let manyFailures = FinishBanner.failureLine(count: 4)
-        if manyFailures != "done with 4 failures 😅👏🏾" {
-            failures.append("59. four failed songs: failureLine expected \"done with 4 failures 😅👏🏾\", got \(String(describing: manyFailures))")
-        }
-
-        let noFailures = FinishBanner.failureLine(count: 0)
+        let noFailures = FinishLines.withFailures(failed: 0, succeeded: 9, pick: 0)
         if noFailures != nil {
-            failures.append("60. no failed songs: failureLine expected nil, got \(String(describing: noFailures))")
+            failures.append("60. no failed songs: failure line expected nil, got \(String(describing: noFailures))")
         }
 
-        let negativeFailures = FinishBanner.failureLine(count: -1)
+        let negativeFailures = FinishLines.withFailures(failed: -1, succeeded: 3, pick: 4)
         if negativeFailures != nil {
-            failures.append("61. a negative count: failureLine expected nil, got \(String(describing: negativeFailures))")
+            failures.append("61. a negative count: failure line expected nil, got \(String(describing: negativeFailures))")
+        }
+
+        var allDoneLines: [String] = []
+        var failureLines: [String] = []
+        var alreadyLines: [String] = []
+        var mixedLines: [String] = []
+        var freshLines: [String] = []
+        for pick in 0..<FinishLines.catalogSize {
+            allDoneLines.append(FinishLines.allDone(pick: pick))
+            if let line = FinishLines.withFailures(failed: 3, succeeded: 11, pick: pick) {
+                failureLines.append(line)
+            }
+            alreadyLines.append(FinishLines.alreadyHere(pick: pick))
+            mixedLines.append(FinishLines.mixed(newCount: 2, alreadyHere: 5, pick: pick))
+            freshLines.append(FinishLines.fresh(newCount: 7, pick: pick))
+        }
+        if Set(allDoneLines).count != 20 {
+            failures.append("63. all-done list expected 20 different lines, got \(Set(allDoneLines).count)")
+        }
+        if failureLines.count != 20 || Set(failureLines).count != 20 {
+            failures.append("64. failure list expected 20 different lines, got \(Set(failureLines).count)")
+        }
+        if Set(alreadyLines).count != 20 || Set(mixedLines).count != 20 || Set(freshLines).count != 20 {
+            failures.append("65. the other finish lists expected 20 different lines each")
+        }
+        let allDoneSet = Set(allDoneLines)
+        if failureLines.contains(where: { allDoneSet.contains($0) }) {
+            failures.append("66. a failure line was taken from the all-done list")
+        }
+        if alreadyLines.contains(where: { allDoneSet.contains($0) || failureLines.contains($0) }) {
+            failures.append("67. an already-here line was taken from another list")
+        }
+        if mixedLines.contains(where: { allDoneSet.contains($0) || failureLines.contains($0) || alreadyLines.contains($0) }) {
+            failures.append("68. a mixed line was taken from another list")
+        }
+        if freshLines.contains(where: {
+            allDoneSet.contains($0) || failureLines.contains($0) || alreadyLines.contains($0) || mixedLines.contains($0)
+        }) {
+            failures.append("69. a new-songs line was taken from another list")
+        }
+        if failureLines.contains(where: { !$0.contains("3") || !$0.contains("11") }) {
+            failures.append("70. a failure line dropped the failed or succeeded count")
+        }
+        if mixedLines.contains(where: { !$0.contains("2") || !$0.contains("5") }) {
+            failures.append("71. a mixed line dropped a count")
+        }
+        if FinishLines.allDone(pick: 20) != FinishLines.allDone(pick: 0) {
+            failures.append("72. pick 20 should stay on the all-done list")
+        }
+        if FinishLines.withFailures(failed: 1, succeeded: 18, pick: 1) == oneFailure {
+            failures.append("73. two failure picks should not be the same line")
         }
 
         if failures.isEmpty {

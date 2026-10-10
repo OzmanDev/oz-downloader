@@ -1,12 +1,15 @@
 # Finish banner
 
-## 2026-10-10 — Done with failures
+## 2026-10-10 — A line from the matching list
 
-When the download and convert have finished and at least one song failed, the finish banner is:
+Each finish purpose has its own list of 20 lines. The app picks one at random when that outcome happens, and keeps that line for the rest of the run. A line from one list is never shown for another outcome.
 
-- 1 song: `done with 1 failure 😅👏🏾`
-- more than one: `done with N failures 😅👏🏾`
+- **All done** (no failed songs): the celebration, including lines like “Oz got the job done as always 🎧✨”.
+- **Done with failures**: names the failed count and the succeeded count, including “Oz got 2 failures, but look at the good side 4 succeeded 😅👏🏾”. One failure stays singular.
+- **Already here**: every song was already saved.
+- **New and already here**: both counts appear.
+- **New songs**: only the new count. Used when the finish note is about songs saved in this run.
 
-That banner replaces “Hell yeah, all done!” and the 🎵 🎶 🔥 🎉 parade. A run with no failed songs still shows the all-done celebration. A cancelled run shows neither.
+Zero or negative failures do not produce a failure line. A cancelled run shows neither the celebration nor a failure line.
 
-N is the number of Failed song rows. Convert still finishing does not show this line yet.
+Succeeded is songs that downloaded or were skipped. Failed is the number of Failed song rows.

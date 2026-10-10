@@ -263,8 +263,8 @@ struct DownloadView: View {
 
             if downloads.showCelebration {
                 celebrationBanner
-            } else if let failureLine = FinishBanner.failureLine(count: downloads.finishFailureCount) {
-                Text(failureLine)
+            } else if downloads.finishFailureCount > 0, !downloads.finishBannerText.isEmpty {
+                Text(downloads.finishBannerText)
                     .foregroundStyle(.secondary)
             } else if !progressSummary.isEmpty {
                 Text(progressSummary)
@@ -361,15 +361,10 @@ struct DownloadView: View {
                 .scaleEffect(celebrationScale)
                 .shadow(color: .green.opacity(0.4), radius: 8, y: 0)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Hell yeah, all done!")
-                    .font(.title3.bold())
-                    .foregroundStyle(.primary)
-                Text("Open Downloads to listen.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .opacity(celebrationOpacity)
+            Text(downloads.finishBannerText)
+                .font(.title3.bold())
+                .foregroundStyle(.primary)
+                .opacity(celebrationOpacity)
 
             Spacer()
 
